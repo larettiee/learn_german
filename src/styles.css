@@ -1388,6 +1388,93 @@ textarea:focus {
 .reader-layout {
   display: grid;
   gap: 14px;
+  padding-bottom: 10px;
+}
+
+.book-shelf,
+.new-book-panel,
+.book-toolbar {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: var(--panel-bg);
+  border-radius: 16px;
+  box-shadow: var(--shadow-border);
+}
+
+.book-shelf-head,
+.book-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.book-shelf-head h4 {
+  margin-top: 3px;
+  font-size: 1.15rem;
+}
+
+.new-book-panel textarea {
+  min-height: 180px;
+}
+
+.book-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.book-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 52px;
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--ink);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-border);
+  text-align: left;
+  transition-property: transform, background-color, box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.book-item span {
+  overflow: hidden;
+  font-weight: 800;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.book-item strong {
+  color: var(--red);
+}
+
+.book-item.is-active {
+  background: color-mix(in srgb, var(--red) 12%, var(--surface-2));
+  box-shadow: var(--shadow-border-hover);
+}
+
+.book-item:active {
+  transform: scale(0.96);
+}
+
+.book-toolbar {
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: end;
+}
+
+.book-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.book-actions .stat-pill {
+  min-height: 44px;
 }
 
 .reader-lookup {
@@ -1505,7 +1592,10 @@ body[data-theme="sekta"] .reader-text > * {
 }
 
 body[data-theme="viper"] .reader-lookup,
-body[data-theme="viper"] .reader-text {
+body[data-theme="viper"] .reader-text,
+body[data-theme="viper"] .book-shelf,
+body[data-theme="viper"] .new-book-panel,
+body[data-theme="viper"] .book-toolbar {
   background:
     linear-gradient(145deg, rgba(255, 249, 238, 0.95), rgba(246, 216, 162, 0.9));
   box-shadow:
@@ -1517,6 +1607,11 @@ body[data-theme="viper"] .reader-text {
 body[data-theme="viper"] .reader-lookup {
   border-left: 12px solid transparent;
   border-image: var(--leopard-print) 16 round;
+}
+
+body[data-theme="viper"] .book-item {
+  background:
+    linear-gradient(145deg, rgba(255, 249, 238, 0.94), rgba(246, 216, 162, 0.9));
 }
 
 body[data-theme="viper"] input,
@@ -1556,6 +1651,31 @@ body[data-theme="viper"] textarea {
 .trainer-card textarea {
   min-height: 150px;
   font-size: 1.05rem;
+}
+
+.batch-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  min-height: 40px;
+  padding: 8px 10px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface-2) 84%, transparent);
+  border-radius: 12px;
+  box-shadow: var(--shadow-border);
+  font-weight: 800;
+}
+
+.batch-strip strong {
+  color: var(--ink);
+}
+
+.batch-strip small {
+  color: var(--red);
+  font-size: 0.78rem;
+  font-weight: 850;
 }
 
 .trainer-actions {
@@ -1844,7 +1964,7 @@ body[data-theme="viper"] textarea {
   }
 
   .main-panel {
-    padding: 14px 14px 98px;
+    padding: 14px 14px 128px;
   }
 
   .top-band,
@@ -1856,9 +1976,26 @@ body[data-theme="viper"] textarea {
   .grade-grid,
   .trainer-grid,
   .reader-form-grid,
+  .book-toolbar,
   .form-row,
   .settings-grid {
     grid-template-columns: 1fr;
+  }
+
+  .book-shelf-head,
+  .book-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .book-list {
+    grid-template-columns: 1fr;
+  }
+
+  .book-actions .secondary-button,
+  .book-actions .danger-button,
+  .book-actions .stat-pill {
+    width: 100%;
   }
 
   .grade-grid {

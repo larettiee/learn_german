@@ -67,6 +67,15 @@ type TrainerItem = {
   lastAnsweredAt?: string;
 };
 
+type ReaderBook = {
+  id: string;
+  title: string;
+  text: string;
+  position: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
 type StreakState = {
   count: number;
   lastStudyDate: string;
@@ -77,6 +86,7 @@ type CloudState = {
   trainerItems: TrainerItem[];
   streak: StreakState;
   readerText?: string;
+  readerBooks?: ReaderBook[];
 };
 
 type SyncStatus = "local" | "loading" | "synced" | "saving" | "error";
@@ -85,7 +95,9 @@ const CARD_KEY = "deutsch-trainer.cards.v1";
 const TRAINER_KEY = "deutsch-trainer.trainer.v1";
 const STREAK_KEY = "deutsch-trainer.streak.v1";
 const READER_KEY = "deutsch-trainer.reader.v1";
+const READER_BOOKS_KEY = "deutsch-trainer.readerBooks.v1";
 const REVIEW_INTERVALS = [1, 3, 7, 14, 30];
+const TRAINER_BATCH_SIZE = 10;
 
 const LEARNING_THEMES: Record<
   Theme,
@@ -364,6 +376,22 @@ function sentenceContext(text: string, word: string, startIndex: number) {
   return text.slice(sentenceStart + 1, startIndex + word.length + sentenceEnd + (afterStops.length ? 1 : 0)).trim();
 }
 
+function titleFromText(text: string) {
+  const firstLine = text.split(/\n+/).find((line) => line.trim())?.trim() ?? "";
+  const cleaned = firstLine.replace(/\s+/g, " ");
+  if (!cleaned) return "Новый текст";
+  return cleaned.length > 42 ? `${cleaned.slice(0, 42).trim()}...` : cleaned;
+}
+
+function clampBookPosition(book: ReaderBook) {
+  return Math.max(0, Math.min(book.position, Math.max(book.text.length - 1, 0)));
+}
+
+function readingProgress(book: ReaderBook) {
+  if (!book.text.trim()) return 0;
+  return Math.min(100, Math.round((clampBookPosition(book) / book.text.length) * 100));
+}
+
 async function lookupGermanArticle(word: string): Promise<Article> {
   const title = word.charAt(0).toLocaleUpperCase("de-DE") + word.slice(1);
   const params = new URLSearchParams({
@@ -505,13 +533,15 @@ export function App() {
   const [trainerItems, setTrainerItems] = usePersistentState<TrainerItem[]>(TRAINER_KEY, []);
   const [streak, setStreak] = usePersistentState<StreakState>(STREAK_KEY, { count: 0, lastStudyDate: "" });
   const [readerText, setReaderText] = usePersistentState(READER_KEY, "");
+  const [readerBooks, setReaderBooks] = usePersistentState<ReaderBook[]>(READER_BOOKS_KEY, []);
+  const [activeBookId, setActiveBookId] = useState("");
   const [session, setSession] = useState<Session | null>(null);
   const [authChecked, setAuthChecked] = useState(!isSupabaseConfigured);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(isSupabaseConfigured ? "loading" : "local");
   const [syncMessage, setSyncMessage] = useState("");
   const hasLoadedCloud = useRef(false);
 
-  const cloudState = useMemo<CloudState>(() => ({ cards, trainerItems, streak, readerText }), [cards, trainerItems, streak, readerText]);
+  const cloudState = useMemo<CloudState>(() => ({ cards, trainerItems, streak, readerBooks }), [cards, trainerItems, streak, readerBooks]);
   const didNormalizeSchedules = useRef(false);
   const theme = themeForEmail(session?.user.email);
   const themeCopy = LEARNING_THEMES[theme];
@@ -527,6 +557,32 @@ export function App() {
     setCards((current) => current.map(normalizeCardSchedule));
     setTrainerItems((current) => current.map(normalizeTrainerSchedule));
   }, [setCards, setTrainerItems]);
+
+  useEffect(() => {
+    if (readerBooks.length || !readerText.trim()) return;
+    const now = new Date().toISOString();
+    const migrated: ReaderBook = {
+      id: uid(),
+      title: titleFromText(readerText),
+      text: readerText,
+      position: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    setReaderBooks([migrated]);
+    setActiveBookId(migrated.id);
+    setReaderText("");
+  }, [readerBooks.length, readerText, setReaderBooks, setReaderText]);
+
+  useEffect(() => {
+    if (!readerBooks.length) {
+      setActiveBookId("");
+      return;
+    }
+    if (!activeBookId || !readerBooks.some((book) => book.id === activeBookId)) {
+      setActiveBookId(readerBooks[0].id);
+    }
+  }, [activeBookId, readerBooks]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -573,7 +629,14 @@ export function App() {
           setCards((remote.cards ?? []).map(normalizeCardSchedule));
           setTrainerItems((remote.trainerItems ?? []).map(normalizeTrainerSchedule));
           setStreak(remote.streak ?? { count: 0, lastStudyDate: "" });
-          setReaderText(remote.readerText ?? "");
+          if (remote.readerBooks?.length) {
+            setReaderBooks(remote.readerBooks);
+            setActiveBookId(remote.readerBooks[0].id);
+            setReaderText("");
+          } else {
+            setReaderBooks([]);
+            setReaderText(remote.readerText ?? "");
+          }
         } else {
           await client.from("language_app_state").upsert({
             user_id: session.user.id,
@@ -590,7 +653,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [session, setCards, setTrainerItems, setStreak, setReaderText, cloudState]);
+  }, [session, setCards, setTrainerItems, setStreak, setReaderBooks, setReaderText, cloudState]);
 
   useEffect(() => {
     if (!supabase || !session || !hasLoadedCloud.current) return;
@@ -630,6 +693,7 @@ export function App() {
         .sort((a, b) => new Date(a.nextReview ?? today()).getTime() - new Date(b.nextReview ?? today()).getTime()),
     [trainerItems],
   );
+  const activeTrainerItems = useMemo(() => dueTrainerItems.slice(0, TRAINER_BATCH_SIZE), [dueTrainerItems]);
   const difficultCards = cards.filter((card) => strengthLabel(card) === "проблемное").length;
   const totalAttempts = cards.reduce((sum, card) => sum + card.attempts, 0);
   const totalCorrect = cards.reduce((sum, card) => sum + card.correct, 0);
@@ -697,11 +761,50 @@ export function App() {
     setTrainerItems([]);
   };
 
+  const createReaderBook = (text: string, title?: string) => {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    const now = new Date().toISOString();
+    const book: ReaderBook = {
+      id: uid(),
+      title: title?.trim() || titleFromText(trimmed),
+      text: trimmed,
+      position: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    setReaderBooks((current) => [book, ...current]);
+    setActiveBookId(book.id);
+  };
+
+  const updateReaderBook = (id: string, patch: Partial<Pick<ReaderBook, "title" | "text" | "position">>) => {
+    setReaderBooks((current) =>
+      current.map((book) =>
+        book.id === id
+          ? {
+              ...book,
+              ...patch,
+              title: patch.title ?? book.title,
+              text: patch.text ?? book.text,
+              position: Math.max(0, Math.min(patch.position ?? book.position, Math.max((patch.text ?? book.text).length - 1, 0))),
+              updatedAt: new Date().toISOString(),
+            }
+          : book,
+      ),
+    );
+  };
+
+  const deleteReaderBook = (id: string) => {
+    setReaderBooks((current) => current.filter((book) => book.id !== id));
+  };
+
   const clearLocalState = () => {
     setCards([]);
     setTrainerItems([]);
     setStreak({ count: 0, lastStudyDate: "" });
     setReaderText("");
+    setReaderBooks([]);
+    setActiveBookId("");
   };
 
   if (isSupabaseConfigured && !authChecked) {
@@ -753,7 +856,7 @@ export function App() {
           <TabButton icon={<FileText />} label="Чтение" active={tab === "reader"} onClick={() => setTab("reader")} />
           <TabButton icon={<Plus />} label="Добавить" active={tab === "add"} onClick={() => setTab("add")} />
           <TabButton icon={<BookOpen />} label="Словарь" active={tab === "dictionary"} onClick={() => setTab("dictionary")} />
-          <TabButton icon={<Dumbbell />} label="Тренажер" active={tab === "trainer"} onClick={() => setTab("trainer")} badge={dueTrainerItems.length} />
+          <TabButton icon={<Dumbbell />} label="Тренажер" active={tab === "trainer"} onClick={() => setTab("trainer")} badge={activeTrainerItems.length} />
           <TabButton icon={<Settings />} label="Настройки" active={tab === "settings"} onClick={() => setTab("settings")} />
         </nav>
 
@@ -776,14 +879,28 @@ export function App() {
         />
 
         {tab === "review" && <ReviewView themeCopy={themeCopy} cards={dueCards} allCards={cards} onReview={reviewCard} onAdd={() => setTab("add")} />}
-        {tab === "reader" && <ReaderView theme={theme} themeCopy={themeCopy} text={readerText} onTextChange={setReaderText} onAdd={(card) => addCard(card, "reader")} />}
+        {tab === "reader" && (
+          <ReaderView
+            theme={theme}
+            themeCopy={themeCopy}
+            books={readerBooks}
+            activeBookId={activeBookId}
+            onSelectBook={setActiveBookId}
+            onCreateBook={createReaderBook}
+            onUpdateBook={updateReaderBook}
+            onDeleteBook={deleteReaderBook}
+            onAdd={(card) => addCard(card, "reader")}
+          />
+        )}
         {tab === "add" && <AddCardView themeCopy={themeCopy} onAdd={addCard} />}
         {tab === "dictionary" && <DictionaryView themeCopy={themeCopy} cards={cards} onDelete={deleteCard} />}
         {tab === "trainer" && (
           <TrainerView
             themeCopy={themeCopy}
-            items={dueTrainerItems}
+            items={activeTrainerItems}
             totalCount={trainerItems.length}
+            dueCount={dueTrainerItems.length}
+            batchSize={TRAINER_BATCH_SIZE}
             onImport={importTrainerItems}
             onAnswer={answerTrainerItem}
           />
@@ -1073,22 +1190,35 @@ function ReviewView({
 function ReaderView({
   theme,
   themeCopy,
-  text,
-  onTextChange,
+  books,
+  activeBookId,
+  onSelectBook,
+  onCreateBook,
+  onUpdateBook,
+  onDeleteBook,
   onAdd,
 }: {
   theme: Theme;
   themeCopy: (typeof LEARNING_THEMES)[Theme];
-  text: string;
-  onTextChange: (text: string) => void;
+  books: ReaderBook[];
+  activeBookId: string;
+  onSelectBook: (id: string) => void;
+  onCreateBook: (text: string, title?: string) => void;
+  onUpdateBook: (id: string, patch: Partial<Pick<ReaderBook, "title" | "text" | "position">>) => void;
+  onDeleteBook: (id: string) => void;
   onAdd: (card: NewCardInput) => void;
 }) {
-  const [selected, setSelected] = useState<{ word: string; context: string } | null>(null);
+  const [selected, setSelected] = useState<{ word: string; context: string; offset: number } | null>(null);
+  const [draftText, setDraftText] = useState("");
+  const [draftTitle, setDraftTitle] = useState("");
+  const [showNewBook, setShowNewBook] = useState(!books.length);
   const [targetWord, setTargetWord] = useState("");
   const [translation, setTranslation] = useState("");
   const [grammar, setGrammar] = useState("");
   const [lookupStatus, setLookupStatus] = useState<"idle" | "loading" | "done">("idle");
   const [saved, setSaved] = useState("");
+  const activeBook = books.find((book) => book.id === activeBookId) ?? books[0];
+  const text = activeBook?.text ?? "";
   const tokens = useMemo(() => tokenizeText(text), [text]);
 
   useEffect(() => {
@@ -1121,18 +1251,43 @@ function ReaderView({
     };
   }, [selected, theme]);
 
+  useEffect(() => {
+    setSelected(null);
+    setSaved("");
+  }, [activeBookId]);
+
+  useEffect(() => {
+    if (!books.length) setShowNewBook(true);
+  }, [books.length]);
+
   const selectWord = (word: string, tokenStart: number) => {
     const cleaned = cleanReaderWord(word);
     if (!cleaned) return;
+    if (activeBook) {
+      onUpdateBook(activeBook.id, { position: tokenStart });
+    }
     setSelected({
       word: cleaned,
       context: sentenceContext(text, cleaned, tokenStart),
+      offset: tokenStart,
     });
   };
 
   const uploadText = (file: File | undefined) => {
     if (!file) return;
-    file.text().then(onTextChange);
+    file.text().then((content) => {
+      setDraftText(content);
+      setDraftTitle(file.name.replace(/\.[^.]+$/, ""));
+      setShowNewBook(true);
+    });
+  };
+
+  const createBook = () => {
+    if (!draftText.trim()) return;
+    onCreateBook(draftText, draftTitle);
+    setDraftText("");
+    setDraftTitle("");
+    setShowNewBook(false);
   };
 
   const saveCard = () => {
@@ -1146,6 +1301,22 @@ function ReaderView({
       lastReviewedAt: undefined,
     });
     setSaved(`${targetWord.trim()} добавлено`);
+  };
+
+  const savePlace = () => {
+    if (!activeBook) return;
+    onUpdateBook(activeBook.id, { position: selected?.offset ?? activeBook.position });
+    setSaved("Место сохранено");
+  };
+
+  const jumpToSaved = () => {
+    if (!activeBook) return;
+    const savedPosition = clampBookPosition(activeBook);
+    const words = Array.from(document.querySelectorAll<HTMLElement>("[data-reader-offset]"));
+    const target =
+      words.find((element) => Number(element.dataset.readerOffset ?? 0) >= savedPosition) ??
+      words.at(-1);
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
   };
 
   let cursor = 0;
@@ -1165,6 +1336,49 @@ function ReaderView({
       </div>
 
       <div className="reader-layout">
+        <div className="book-shelf">
+          <div className="book-shelf-head">
+            <div>
+              <p className="eyebrow">мини-книжки</p>
+              <h4>Библиотека</h4>
+            </div>
+            <button className="secondary-button" onClick={() => setShowNewBook((value) => !value)}>
+              <Plus size={18} />
+              <span>Новая</span>
+            </button>
+          </div>
+
+          {showNewBook && (
+            <div className="new-book-panel">
+              <label>
+                <span>Название</span>
+                <input value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} placeholder="например: Fanfic B1-B2" />
+              </label>
+              <label>
+                <span>Текст</span>
+                <textarea
+                  value={draftText}
+                  onChange={(event) => setDraftText(event.target.value)}
+                  placeholder={theme === "sekta" ? "Вставь немецкий текст..." : "Вставь английский текст B1-B2..."}
+                />
+              </label>
+              <button className="primary-button" onClick={createBook} disabled={!draftText.trim()}>
+                <BookOpen size={18} />
+                <span>Сохранить книжку</span>
+              </button>
+            </div>
+          )}
+
+          <div className="book-list">
+            {books.map((book) => (
+              <button className={`book-item ${book.id === activeBook?.id ? "is-active" : ""}`} key={book.id} onClick={() => onSelectBook(book.id)}>
+                <span>{book.title}</span>
+                <strong className="tabular">{readingProgress(book)}%</strong>
+              </button>
+            ))}
+          </div>
+        </div>
+
         {selected && (
           <div className="reader-lookup">
             <div className="lookup-head">
@@ -1204,20 +1418,36 @@ function ReaderView({
           </div>
         )}
 
-        <div className="reader-editor">
-          <textarea
-            value={text}
-            onChange={(event) => onTextChange(event.target.value)}
-            placeholder={theme === "sekta" ? "Вставь немецкий текст. Потом нажимай на незнакомые слова." : "Вставь английский текст B1-C1. Потом нажимай на незнакомые слова."}
-          />
-        </div>
+        {activeBook && (
+          <div className="book-toolbar">
+            <label>
+              <span>Название</span>
+              <input value={activeBook.title} onChange={(event) => onUpdateBook(activeBook.id, { title: event.target.value })} />
+            </label>
+            <div className="book-actions">
+              <StatPill icon={<BookOpen />} label="Прогресс" value={`${readingProgress(activeBook)}%`} />
+              <button className="secondary-button" onClick={jumpToSaved}>
+                <ArrowRight size={18} />
+                <span>К месту</span>
+              </button>
+              <button className="secondary-button" onClick={savePlace}>
+                <Check size={18} />
+                <span>Закончила здесь</span>
+              </button>
+              <button className="danger-button" onClick={() => window.confirm("Удалить эту мини-книжку?") && onDeleteBook(activeBook.id)}>
+                <X size={18} />
+                <span>Удалить</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="reader-text" aria-label="Текст для чтения">
-          {!text.trim() ? (
+          {!activeBook ? (
             <div className="empty-state compact">
               <FileText size={28} />
-              <h3>Вставь текст</h3>
-              <p>Слова станут кликабельными, а карточка для добавления появится над текстом.</p>
+              <h3>Добавь первую мини-книжку</h3>
+              <p>Текст сохранится в библиотеке, и ты сможешь вернуться к месту, где остановилась.</p>
             </div>
           ) : (
             tokens.map((token, index) => {
@@ -1225,7 +1455,7 @@ function ReaderView({
               cursor += token.length;
               if (!isWordToken(token)) return <span key={`${token}-${index}`}>{token}</span>;
               return (
-                <button className="reader-word" key={`${token}-${index}`} onClick={() => selectWord(token, tokenStart)}>
+                <button className="reader-word" key={`${token}-${index}`} data-reader-offset={tokenStart} onClick={() => selectWord(token, tokenStart)}>
                   {token}
                 </button>
               );
@@ -1350,12 +1580,16 @@ function TrainerView({
   themeCopy,
   items,
   totalCount,
+  dueCount,
+  batchSize,
   onImport,
   onAnswer,
 }: {
   themeCopy: (typeof LEARNING_THEMES)[Theme];
   items: TrainerItem[];
   totalCount: number;
+  dueCount: number;
+  batchSize: number;
   onImport: (items: Array<Pick<TrainerItem, "russian" | "german">>) => void;
   onAnswer: (id: string, correct: boolean) => void;
 }) {
@@ -1439,6 +1673,11 @@ function TrainerView({
             <div className="card-meta">
               <span className="tabular">{currentIndex + 1}/{items.length}</span>
               <span className="tabular">{accuracy(current.correct, current.attempts)}%</span>
+            </div>
+            <div className="batch-strip">
+              <span>Пачка</span>
+              <strong className="tabular">{items.length} из {dueCount}</strong>
+              <small>работаем по {batchSize}</small>
             </div>
             <p className="prompt-label">{themeCopy.trainerPrompt}</p>
             <h3>{current.russian}</h3>
