@@ -1634,6 +1634,12 @@ body[data-theme="viper"] textarea {
   padding: 18px;
 }
 
+.trainer-stats-strip {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .trainer-grid {
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.75fr);
@@ -1975,6 +1981,7 @@ body[data-theme="viper"] textarea {
 
   .grade-grid,
   .trainer-grid,
+  .trainer-stats-strip,
   .reader-form-grid,
   .book-toolbar,
   .form-row,

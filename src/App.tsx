@@ -697,6 +697,8 @@ export function App() {
   const difficultCards = cards.filter((card) => strengthLabel(card) === "проблемное").length;
   const totalAttempts = cards.reduce((sum, card) => sum + card.attempts, 0);
   const totalCorrect = cards.reduce((sum, card) => sum + card.correct, 0);
+  const trainerAttempts = trainerItems.reduce((sum, item) => sum + item.attempts, 0);
+  const trainerCorrect = trainerItems.reduce((sum, item) => sum + item.correct, 0);
 
   const markStudiedToday = () => {
     const current = today();
@@ -901,6 +903,8 @@ export function App() {
             totalCount={trainerItems.length}
             dueCount={dueTrainerItems.length}
             batchSize={TRAINER_BATCH_SIZE}
+            correctCount={trainerCorrect}
+            attemptsCount={trainerAttempts}
             onImport={importTrainerItems}
             onAnswer={answerTrainerItem}
           />
@@ -1582,6 +1586,8 @@ function TrainerView({
   totalCount,
   dueCount,
   batchSize,
+  correctCount,
+  attemptsCount,
   onImport,
   onAnswer,
 }: {
@@ -1590,6 +1596,8 @@ function TrainerView({
   totalCount: number;
   dueCount: number;
   batchSize: number;
+  correctCount: number;
+  attemptsCount: number;
   onImport: (items: Array<Pick<TrainerItem, "russian" | "german">>) => void;
   onAnswer: (id: string, correct: boolean) => void;
 }) {
@@ -1602,6 +1610,7 @@ function TrainerView({
   const current = items[currentIndex % Math.max(items.length, 1)];
   const parsedCount = parseTrainerImport(importText).length;
   const isMatch = current ? normalizeAnswer(answer) === normalizeAnswer(current.german) : false;
+  const trainerAccuracy = accuracy(correctCount, attemptsCount);
 
   useEffect(() => {
     if (currentIndex >= items.length) {
@@ -1636,6 +1645,12 @@ function TrainerView({
           <Import size={18} />
           <span>Импорт</span>
         </button>
+      </div>
+
+      <div className="trainer-stats-strip">
+        <StatPill icon={<ClipboardList />} label="Правильно" value={`${trainerAccuracy}%`} />
+        <StatPill icon={<Check />} label="Ответы" value={`${correctCount}/${attemptsCount}`} />
+        <StatPill icon={<Dumbbell />} label="Предложения" value={`${totalCount}`} />
       </div>
 
       {showImport && (
