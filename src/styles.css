@@ -55,25 +55,24 @@ body[data-theme="sekta"] {
 }
 
 body[data-theme="viper"] {
-  --bg: #ff9fcf;
-  --surface: #fff2fa;
-  --surface-2: #ffc3e4;
+  --bg: #c58a3a;
+  --surface: #fff4ea;
+  --surface-2: #f0c471;
   --ink: #1c0715;
-  --muted: #79415f;
-  --faint: #b65b8c;
+  --muted: #6d3f25;
+  --faint: #9a6631;
   --red: #f00689;
   --gold: #ba7b12;
   --green: #256f5e;
   --blue: #334eb8;
   --pink: #ff4fb3;
+  --leopard-print: url("/patterns/leopard-skin.png");
   --panel-bg:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.78), rgba(255, 168, 217, 0.72)),
-    radial-gradient(circle at 14% 16%, rgba(255, 255, 255, 0.82), transparent 12rem);
+    linear-gradient(145deg, rgba(255, 247, 232, 0.94), rgba(246, 213, 154, 0.9));
   --sidebar-bg:
-    radial-gradient(circle at 28% 18%, #1a0702 0 8px, #d58a24 9px 16px, transparent 17px 40px),
-    radial-gradient(circle at 76% 42%, #1a0702 0 7px, #e4a43a 8px 15px, transparent 16px 38px),
-    radial-gradient(circle at 42% 74%, #1a0702 0 9px, #c77520 10px 17px, transparent 18px 42px),
-    linear-gradient(180deg, rgba(48, 0, 28, 0.96), rgba(193, 0, 104, 0.76));
+    linear-gradient(180deg, rgba(45, 13, 4, 0.34), rgba(114, 43, 13, 0.18)),
+    var(--leopard-print),
+    linear-gradient(180deg, #bd7d30, #6f2c12);
   --shadow-border:
     inset 0 1px 0 rgba(255, 255, 255, 0.68),
     0 0 0 1px rgba(128, 13, 75, 0.1),
@@ -144,14 +143,10 @@ body[data-theme="sekta"]::after {
 
 body[data-theme="viper"] {
   background:
-    radial-gradient(circle at 10% 8%, rgba(255, 255, 255, 0.84), transparent 13rem),
-    radial-gradient(circle at 88% 4%, rgba(255, 0, 137, 0.36), transparent 18rem),
-    radial-gradient(circle at 19% 23%, #1b0802 0 8px, #d1841f 9px 17px, transparent 18px 42px),
-    radial-gradient(circle at 74% 18%, #210902 0 7px, #e0a033 8px 16px, transparent 17px 38px),
-    radial-gradient(circle at 42% 68%, #1b0802 0 9px, #c46e1e 10px 18px, transparent 19px 44px),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.34) 0 1px, transparent 1px 28px),
-    linear-gradient(140deg, #ff75bc 0%, #ffe8f5 38%, #f00689 100%);
-  background-size: auto, auto, 180px 180px, 210px 210px, 240px 240px, 30px 30px, auto;
+    linear-gradient(140deg, rgba(255, 0, 137, 0.18), rgba(255, 244, 232, 0.12) 36%, rgba(35, 7, 2, 0.18)),
+    var(--leopard-print),
+    linear-gradient(140deg, #d99b4b, #8f481f);
+  background-size: auto, 150px 150px, auto;
   background-attachment: fixed;
 }
 
@@ -179,9 +174,9 @@ body[data-theme="viper"]::after {
   z-index: -1;
   pointer-events: none;
   background:
-    repeating-linear-gradient(115deg, transparent 0 46px, rgba(255, 255, 255, 0.34) 47px 48px, transparent 49px 92px),
-    linear-gradient(180deg, rgba(52, 9, 34, 0.14), transparent 32%);
-  opacity: 0.82;
+    repeating-linear-gradient(115deg, transparent 0 46px, rgba(255, 255, 255, 0.22) 47px 48px, transparent 49px 92px),
+    linear-gradient(180deg, rgba(52, 9, 34, 0.1), transparent 32%);
+  opacity: 0.62;
 }
 
 button,
@@ -344,10 +339,10 @@ body[data-theme="sekta"] .brand-mark {
 body[data-theme="viper"] .brand-mark {
   color: #fff;
   background:
-    radial-gradient(circle at 22% 20%, rgba(255, 255, 255, 0.92), transparent 15%),
-    radial-gradient(circle at 36% 34%, #160600 0 5px, #d98d22 6px 10px, transparent 11px 20px),
-    radial-gradient(circle at 72% 66%, #160600 0 4px, #eca844 5px 9px, transparent 10px 18px),
-    linear-gradient(135deg, #250016 0%, #a60062 50%, #ff58bd 100%);
+    linear-gradient(135deg, rgba(37, 0, 22, 0.38), rgba(255, 79, 179, 0.34)),
+    var(--leopard-print),
+    #c9873a;
+  background-size: auto, 70px 70px, auto;
   text-shadow:
     0 1px 0 rgba(0, 0, 0, 0.36),
     0 0 12px rgba(255, 255, 255, 0.74);
@@ -723,11 +718,11 @@ body[data-theme="viper"] .top-band::after {
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(90deg, rgba(42, 0, 24, 0.72), transparent 32%),
-    radial-gradient(circle at 12% 72%, #190701 0 9px, #da8b24 10px 18px, transparent 19px 45px),
-    radial-gradient(circle at 32% 24%, #1d0701 0 7px, #f0ad3f 8px 16px, transparent 17px 38px),
+    linear-gradient(90deg, rgba(42, 0, 24, 0.26), transparent 34%),
+    var(--leopard-print),
     linear-gradient(106deg, transparent 0%, rgba(255, 255, 255, 0.54) 38%, transparent 56%);
-  opacity: 0.62;
+  background-size: auto, 150px 150px, auto;
+  opacity: 0.4;
   transform: translateX(-120%);
   animation: glitter-sheen 7s ease-in-out infinite;
 }
@@ -885,9 +880,10 @@ body[data-theme="viper"] .primary-button {
 
 body[data-theme="viper"] .profile-mark {
   background:
-    radial-gradient(circle at 32% 34%, rgba(25, 7, 1, 0.88) 0 5px, rgba(240, 157, 38, 0.82) 6px 10px, transparent 11px 19px),
-    radial-gradient(circle at 72% 66%, rgba(25, 7, 1, 0.82) 0 4px, rgba(240, 157, 38, 0.72) 5px 9px, transparent 10px 17px),
-    linear-gradient(135deg, #390020, #ff4fb3);
+    linear-gradient(135deg, rgba(57, 0, 32, 0.45), rgba(255, 79, 179, 0.28)),
+    var(--leopard-print),
+    #c9873a;
+  background-size: auto, 70px 70px, auto;
 }
 
 .theme-switch {
@@ -974,13 +970,10 @@ body[data-theme="viper"] .trainer-card::before {
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(90deg, rgba(49, 0, 29, 0.54), transparent 25%),
-    radial-gradient(circle at 20% 12%, rgba(255, 255, 255, 0.84), transparent 12rem),
-    radial-gradient(circle at 11% 24%, #1a0701 0 7px, #d88925 8px 15px, transparent 16px 36px),
-    radial-gradient(circle at 30% 70%, #200801 0 8px, #e8a63a 9px 16px, transparent 17px 40px),
-    radial-gradient(circle at 78% 18%, rgba(26, 7, 1, 0.58) 0 5px, rgba(216, 137, 37, 0.6) 6px 12px, transparent 13px 34px),
+    linear-gradient(90deg, rgba(49, 0, 29, 0.18), transparent 28%),
     repeating-linear-gradient(112deg, transparent 0 36px, rgba(255, 255, 255, 0.32) 37px 38px, transparent 39px 82px);
-  opacity: 0.68;
+  background-size: auto, auto;
+  opacity: 0.52;
   animation: viper-glitter 10s linear infinite;
 }
 
@@ -1094,13 +1087,28 @@ body[data-theme="viper"] .compare-block,
 body[data-theme="viper"] .import-panel,
 body[data-theme="viper"] .word-row {
   background:
-    radial-gradient(circle at 12% 20%, rgba(37, 8, 1, 0.28) 0 5px, rgba(218, 142, 39, 0.28) 6px 12px, transparent 13px 32px),
-    radial-gradient(circle at 82% 74%, rgba(37, 8, 1, 0.24) 0 4px, rgba(218, 142, 39, 0.22) 5px 10px, transparent 11px 28px),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.7), rgba(255, 195, 228, 0.7));
+    linear-gradient(145deg, rgba(255, 249, 238, 0.94), rgba(246, 216, 162, 0.9));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.58),
     0 0 0 1px rgba(226, 23, 134, 0.08),
     0 0 22px -18px rgba(255, 79, 179, 0.9);
+}
+
+body[data-theme="viper"] .word-row {
+  position: relative;
+  overflow: hidden;
+}
+
+body[data-theme="viper"] .word-row::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 12px;
+  background:
+    var(--leopard-print),
+    #c9873a;
+  background-size: 90px 90px, auto;
+  opacity: 0.95;
 }
 
 .answer-word {
@@ -1499,13 +1507,24 @@ body[data-theme="sekta"] .reader-text > * {
 body[data-theme="viper"] .reader-lookup,
 body[data-theme="viper"] .reader-text {
   background:
-    radial-gradient(circle at 9% 18%, rgba(30, 8, 1, 0.3) 0 6px, rgba(226, 145, 38, 0.28) 7px 14px, transparent 15px 34px),
-    radial-gradient(circle at 92% 12%, rgba(30, 8, 1, 0.24) 0 5px, rgba(226, 145, 38, 0.22) 6px 12px, transparent 13px 30px),
-    linear-gradient(145deg, rgba(255, 255, 255, 0.74), rgba(255, 196, 229, 0.7));
+    linear-gradient(145deg, rgba(255, 249, 238, 0.95), rgba(246, 216, 162, 0.9));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.62),
     0 0 0 1px rgba(226, 23, 134, 0.08),
     0 22px 50px -34px rgba(100, 6, 57, 0.72);
+}
+
+body[data-theme="viper"] .reader-lookup {
+  border-left: 12px solid transparent;
+  border-image: var(--leopard-print) 16 round;
+}
+
+body[data-theme="viper"] input,
+body[data-theme="viper"] textarea {
+  background: rgba(255, 249, 238, 0.92);
+  box-shadow:
+    inset 0 0 0 1px rgba(55, 15, 5, 0.08),
+    0 1px 0 rgba(255, 255, 255, 0.48);
 }
 
 .trainer-section {
@@ -1845,9 +1864,6 @@ body[data-theme="viper"] .reader-text {
   .grade-grid {
     grid-template-columns: 1fr 1fr;
     gap: 8px;
-    position: sticky;
-    bottom: 88px;
-    z-index: 12;
   }
 
   .table-head {
