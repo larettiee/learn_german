@@ -325,6 +325,7 @@ export function App() {
   const [streak, setStreak] = usePersistentState<StreakState>(STREAK_KEY, { count: 0, lastStudyDate: "" });
   const [theme, setTheme] = usePersistentState<Theme>(THEME_KEY, "rainy");
   const [session, setSession] = useState<Session | null>(null);
+  const [authChecked, setAuthChecked] = useState(!isSupabaseConfigured);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(isSupabaseConfigured ? "loading" : "local");
   const [syncMessage, setSyncMessage] = useState("");
   const hasLoadedCloud = useRef(false);
@@ -350,12 +351,14 @@ export function App() {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setSyncStatus(data.session ? "loading" : "local");
+      setAuthChecked(true);
     });
 
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       hasLoadedCloud.current = false;
       setSession(nextSession);
       setSyncStatus(nextSession ? "loading" : "local");
+      setAuthChecked(true);
     });
 
     return () => data.subscription.unsubscribe();
@@ -510,6 +513,45 @@ export function App() {
     setTrainerItems([]);
   };
 
+  const clearLocalState = () => {
+    setCards([]);
+    setTrainerItems([]);
+    setStreak({ count: 0, lastStudyDate: "" });
+  };
+
+  if (isSupabaseConfigured && !authChecked) {
+    return (
+      <div className="auth-shell">
+        <div className="brand auth-brand">
+          <div className="brand-mark">D</div>
+          <div>
+            <p className="eyebrow">личный немецкий</p>
+            <h1>Deutsch Trainer</h1>
+          </div>
+        </div>
+        <div className="auth-card">
+          <strong>Проверяю вход</strong>
+          <p className="muted">Секунду, достаю сессию.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isSupabaseConfigured && !session) {
+    return (
+      <div className="auth-shell">
+        <div className="brand auth-brand">
+          <div className="brand-mark">D</div>
+          <div>
+            <p className="eyebrow">личный немецкий</p>
+            <h1>Deutsch Trainer</h1>
+          </div>
+        </div>
+        <SyncPanel session={session} syncStatus={syncStatus} syncMessage={syncMessage} onSignedOut={clearLocalState} />
+      </div>
+    );
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -529,7 +571,7 @@ export function App() {
           <TabButton icon={<Settings />} label="Настройки" active={tab === "settings"} onClick={() => setTab("settings")} />
         </nav>
 
-        <SyncPanel session={session} syncStatus={syncStatus} syncMessage={syncMessage} />
+        <SyncPanel session={session} syncStatus={syncStatus} syncMessage={syncMessage} onSignedOut={clearLocalState} />
 
         <div className="sidebar-stats">
           <StatPill icon={<Flame />} label="Streak" value={`${streak.count} дн.`} />
@@ -577,30 +619,66 @@ function SyncPanel({
   session,
   syncStatus,
   syncMessage,
+  onSignedOut,
 }: {
   session: Session | null;
   syncStatus: SyncStatus;
   syncMessage: string;
+  onSignedOut: () => void;
 }) {
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const signIn = async (event: FormEvent) => {
+  const signInWithPassword = async (event: FormEvent) => {
     event.preventDefault();
+    if (!supabase || !email.trim() || !password) return;
+    setBusy(true);
+    setError("");
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: email.trim(),
+      password,
+    });
+    setBusy(false);
+    if (signInError) {
+      setError(signInError.message);
+    }
+  };
+
+  const signUpWithPassword = async () => {
+    if (!supabase || !email.trim() || password.length < 6) return;
+    setBusy(true);
+    setError("");
+    const { error: signUpError } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: {
+        emailRedirectTo: window.location.origin,
+      },
+    });
+    setBusy(false);
+    if (signUpError) {
+      setError(signUpError.message);
+    } else {
+      setSent(true);
+    }
+  };
+
+  const sendMagicLink = async () => {
     if (!supabase || !email.trim()) return;
     setBusy(true);
     setError("");
-    const { error: signInError } = await supabase.auth.signInWithOtp({
+    const { error: otpError } = await supabase.auth.signInWithOtp({
       email: email.trim(),
       options: {
         emailRedirectTo: window.location.origin,
       },
     });
     setBusy(false);
-    if (signInError) {
-      setError(signInError.message);
+    if (otpError) {
+      setError(otpError.message);
     } else {
       setSent(true);
     }
@@ -609,6 +687,7 @@ function SyncPanel({
   const signOut = async () => {
     if (!supabase) return;
     await supabase.auth.signOut();
+    onSignedOut();
   };
 
   if (!isSupabaseConfigured) {
@@ -635,13 +714,22 @@ function SyncPanel({
   }
 
   return (
-    <form className="sync-panel" onSubmit={signIn}>
-      <strong>Синхронизация</strong>
-      <p>{sent ? "Проверь почту и открой ссылку входа." : "Войди по email, чтобы синхронизировать Mac и телефон."}</p>
+    <form className="sync-panel auth-form" onSubmit={signInWithPassword}>
+      <strong>Аккаунт</strong>
+      <p>{sent ? "Если Supabase просит подтверждение, проверь почту." : "Войди или создай аккаунт. Каждый пользователь видит только свои карточки."}</p>
       <input value={email} onChange={(event) => setEmail(event.target.value)} placeholder="email" type="email" />
+      <input value={password} onChange={(event) => setPassword(event.target.value)} placeholder="пароль" type="password" minLength={6} />
       {error && <p className="sync-error">{error}</p>}
-      <button className="secondary-button" type="submit" disabled={busy || !email.trim()}>
-        {busy ? "Отправляю" : "Получить ссылку"}
+      <div className="auth-actions">
+        <button className="primary-button" type="submit" disabled={busy || !email.trim() || !password}>
+          {busy ? "Вхожу" : "Войти"}
+        </button>
+        <button className="secondary-button" type="button" onClick={signUpWithPassword} disabled={busy || !email.trim() || password.length < 6}>
+          Создать
+        </button>
+      </div>
+      <button className="text-button" type="button" onClick={sendMagicLink} disabled={busy || !email.trim()}>
+        Отправить magic link
       </button>
     </form>
   );

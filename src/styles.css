@@ -159,6 +159,29 @@ textarea {
   min-height: 100vh;
 }
 
+.auth-shell {
+  display: grid;
+  align-content: center;
+  gap: 18px;
+  width: min(440px, calc(100% - 28px));
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 28px 0;
+}
+
+.auth-brand {
+  justify-content: center;
+}
+
+.auth-card {
+  display: grid;
+  gap: 8px;
+  padding: 20px;
+  background: var(--panel-bg);
+  border-radius: 18px;
+  box-shadow: var(--shadow-border);
+}
+
 .sidebar {
   position: sticky;
   top: 0;
@@ -364,6 +387,26 @@ button svg {
 .sync-panel .secondary-button {
   width: 100%;
   min-height: 40px;
+}
+
+.auth-form {
+  gap: 10px;
+  padding: 18px;
+}
+
+.auth-form input {
+  min-height: 44px;
+}
+
+.auth-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.auth-actions .primary-button,
+.auth-actions .secondary-button {
+  width: 100%;
 }
 
 .sync-row {
