@@ -98,6 +98,7 @@ const READER_KEY = "deutsch-trainer.reader.v1";
 const READER_BOOKS_KEY = "deutsch-trainer.readerBooks.v1";
 const REVIEW_INTERVALS = [1, 3, 7, 14, 30];
 const TRAINER_BATCH_SIZE = 10;
+const TRAINER_MASTERY_STREAK = 3;
 
 const LEARNING_THEMES: Record<
   Theme,
@@ -458,18 +459,20 @@ function updateCardAfterReview(card: Card, grade: ReviewGrade): Card {
 
 function updateTrainerAfterAnswer(item: TrainerItem, correct: boolean): TrainerItem {
   const currentStep = completedTrainerStep(item);
-  const nextStep = correct ? Math.min(currentStep + 1, REVIEW_INTERVALS.length) : 0;
-  const nextInterval = correct ? REVIEW_INTERVALS[Math.min(currentStep, REVIEW_INTERVALS.length - 1)] : REVIEW_INTERVALS[0];
+  const nextStreak = correct ? (item.streak ?? 0) + 1 : 0;
+  const isMasteredForToday = correct && nextStreak >= TRAINER_MASTERY_STREAK;
+  const nextStep = isMasteredForToday ? Math.min(currentStep + 1, REVIEW_INTERVALS.length) : currentStep;
+  const nextInterval = isMasteredForToday ? REVIEW_INTERVALS[Math.min(currentStep, REVIEW_INTERVALS.length - 1)] : item.intervalDays ?? 1;
 
   return {
     ...item,
-    nextReview: addDaysIso(nextInterval),
+    nextReview: isMasteredForToday ? addDaysIso(nextInterval) : today(),
     intervalDays: nextInterval,
     reviewStep: nextStep,
     attempts: item.attempts + 1,
     correct: item.correct + (correct ? 1 : 0),
     wrong: item.wrong + (correct ? 0 : 1),
-    streak: correct ? (item.streak ?? 0) + 1 : 0,
+    streak: isMasteredForToday ? 0 : nextStreak,
     lastAnsweredAt: new Date().toISOString(),
   };
 }
@@ -1693,6 +1696,7 @@ function TrainerView({
               <span>Пачка</span>
               <strong className="tabular">{items.length} из {dueCount}</strong>
               <small>работаем по {batchSize}</small>
+              <small className="tabular">серия {(current.streak ?? 0)}/{TRAINER_MASTERY_STREAK}</small>
             </div>
             <p className="prompt-label">{themeCopy.trainerPrompt}</p>
             <h3>{current.russian}</h3>
