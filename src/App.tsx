@@ -7,6 +7,7 @@ import {
   ChevronDown,
   ClipboardList,
   Dumbbell,
+  FileText,
   Flame,
   Import,
   Layers,
@@ -21,8 +22,8 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "./supabase";
 
-type Tab = "review" | "add" | "dictionary" | "trainer" | "settings";
-type Theme = "rainy" | "classic";
+type Tab = "review" | "reader" | "add" | "dictionary" | "trainer" | "settings";
+type Theme = "sekta" | "viper";
 type Article = "" | "der" | "die" | "das";
 type ReviewGrade = "again" | "hard" | "good" | "easy";
 
@@ -75,6 +76,7 @@ type CloudState = {
   cards: Card[];
   trainerItems: TrainerItem[];
   streak: StreakState;
+  readerText?: string;
 };
 
 type SyncStatus = "local" | "loading" | "synced" | "saving" | "error";
@@ -82,8 +84,117 @@ type SyncStatus = "local" | "loading" | "synced" | "saving" | "error";
 const CARD_KEY = "deutsch-trainer.cards.v1";
 const TRAINER_KEY = "deutsch-trainer.trainer.v1";
 const STREAK_KEY = "deutsch-trainer.streak.v1";
-const THEME_KEY = "deutsch-trainer.theme.v1";
+const READER_KEY = "deutsch-trainer.reader.v1";
 const REVIEW_INTERVALS = [1, 3, 7, 14, 30];
+
+const LEARNING_THEMES: Record<
+  Theme,
+  {
+    brandMark: string;
+    eyebrow: string;
+    title: string;
+    languageName: string;
+    vibeName: string;
+    todayLabel: string;
+    reviewPrompt: string;
+    emptyCardHint: string;
+    addEyebrow: string;
+    addHint: string;
+    targetLabel: string;
+    targetPlaceholder: string;
+    formLabel: string;
+    formPlaceholder: string;
+    formExtraLabel: string;
+    formExtraPlaceholder: string;
+    exampleLabel: string;
+    examplePlaceholder: string;
+    dictionaryEyebrow: string;
+    trainerEyebrow: string;
+    trainerTitle: string;
+    trainerImportHint: string;
+    trainerImportPlaceholder: string;
+    trainerEmptyHint: string;
+    trainerPrompt: string;
+    trainerAnswerPlaceholder: string;
+    trainerHiddenHint: string;
+  }
+> = {
+  sekta: {
+    brandMark: "D",
+    eyebrow: "немецкий · london rain",
+    title: "London Rain",
+    languageName: "Немецкий",
+    vibeName: "London Rain",
+    todayLabel: "Heute",
+    reviewPrompt: "Переведи на немецкий",
+    emptyCardHint: "Добавь первое немецкое слово, и оно сразу появится в очереди.",
+    addEyebrow: "Neue Karte",
+    addHint:
+      "Пиши артикль прямо в начале поля: `der Tisch`, `die Tasche`, `das Obst`. Приложение подсветит его само.",
+    targetLabel: "Немецкий с артиклем, если нужен",
+    targetPlaceholder: "das Haus",
+    formLabel: "Plural / форма",
+    formPlaceholder: "die Häuser",
+    formExtraLabel: "Мини-грамматика",
+    formExtraPlaceholder: "например: kaufen + Akkusativ",
+    exampleLabel: "Пример на немецком",
+    examplePlaceholder: "Das Haus ist sehr alt.",
+    dictionaryEyebrow: "Wortschatz",
+    trainerEyebrow: "Satztraining",
+    trainerTitle: "Тренажер предложений",
+    trainerImportHint:
+      "Вставь таблицу с колонками `Русский` и `Немецкий`, строки русский + Tab + немецкий, CSV через `;` или JSON: [{\"ru\":\"Я иду домой\",\"de\":\"Ich gehe nach Hause\"}].",
+    trainerImportPlaceholder: "Я покупаю хлеб.\tIch kaufe Brot.\nМы живем в Берлине.;Wir wohnen in Berlin.",
+    trainerEmptyHint:
+      "После импорта приложение будет показывать русский вариант, а ты будешь писать немецкий и сравнивать с эталоном.",
+    trainerPrompt: "Напиши по-немецки",
+    trainerAnswerPlaceholder: "Deine Antwort...",
+    trainerHiddenHint: "Сначала напиши вариант, потом сравним его с сохраненным немецким предложением.",
+  },
+  viper: {
+    brandMark: "E",
+    eyebrow: "b1 / b2 / c1 english",
+    title: "English Gloss",
+    languageName: "Английский",
+    vibeName: "Y2K Gloss",
+    todayLabel: "Today",
+    reviewPrompt: "Переведи на английский",
+    emptyCardHint: "Добавь первое английское слово или выражение, и оно сразу появится в очереди.",
+    addEyebrow: "New Drop",
+    addHint:
+      "Добавляй английские слова, фразы и устойчивые выражения. В поле формы можно писать уровень, часть речи или вариант произношения.",
+    targetLabel: "Английский",
+    targetPlaceholder: "to figure out",
+    formLabel: "Форма / уровень",
+    formPlaceholder: "B2 · phrasal verb",
+    formExtraLabel: "Мини-грамматика",
+    formExtraPlaceholder: "например: used to + V, Present Perfect",
+    exampleLabel: "Пример на английском",
+    examplePlaceholder: "I need to figure out what happened.",
+    dictionaryEyebrow: "Glossy Lexicon",
+    trainerEyebrow: "Sentence Lab",
+    trainerTitle: "Тренажер предложений",
+    trainerImportHint:
+      "Вставь таблицу с колонками `Русский` и `Английский`, строки русский + Tab + английский, CSV через `;` или JSON: [{\"ru\":\"Я иду домой\",\"de\":\"I am going home\"}].",
+    trainerImportPlaceholder: "Я не уверена.\tI'm not sure.\nОна уже ушла.;She has already left.",
+    trainerEmptyHint:
+      "После импорта приложение будет показывать русский вариант, а ты будешь писать английский и сравнивать с эталоном.",
+    trainerPrompt: "Напиши по-английски",
+    trainerAnswerPlaceholder: "Your answer...",
+    trainerHiddenHint: "Сначала напиши вариант, потом сравним его с сохраненным английским предложением.",
+  },
+};
+
+const AUTH_BRAND = {
+  brandMark: "L",
+  eyebrow: "personal language trainer",
+  title: "Language Trainer",
+};
+
+const USER_THEMES: Record<string, Theme> = {
+  "tushinavaleria@yandex.ru": "sekta",
+  "tseb1so@vk.com": "viper",
+};
 
 const today = () => startOfDay(new Date()).toISOString();
 
@@ -108,6 +219,10 @@ function readStorage<T>(key: string, fallback: T): T {
 
 function writeStorage<T>(key: string, value: T) {
   localStorage.setItem(key, JSON.stringify(value));
+}
+
+function themeForEmail(email?: string | null): Theme {
+  return USER_THEMES[email?.trim().toLocaleLowerCase("ru") ?? ""] ?? "sekta";
 }
 
 function normalizeAnswer(value: string) {
@@ -228,6 +343,72 @@ function GermanTerm({ value, className = "" }: { value: string; className?: stri
   );
 }
 
+function tokenizeText(text: string) {
+  return text.match(/[\p{L}\p{M}]+(?:[-'][\p{L}\p{M}]+)*|[^\p{L}\p{M}]+/gu) ?? [];
+}
+
+function isWordToken(token: string) {
+  return /[\p{L}\p{M}]/u.test(token);
+}
+
+function cleanReaderWord(word: string) {
+  return word.replace(/^[^\p{L}\p{M}]+|[^\p{L}\p{M}]+$/gu, "");
+}
+
+function sentenceContext(text: string, word: string, startIndex: number) {
+  const before = text.slice(0, startIndex);
+  const after = text.slice(startIndex + word.length);
+  const sentenceStart = Math.max(before.lastIndexOf("."), before.lastIndexOf("!"), before.lastIndexOf("?"), before.lastIndexOf("\n"));
+  const afterStops = [after.indexOf("."), after.indexOf("!"), after.indexOf("?"), after.indexOf("\n")].filter((index) => index >= 0);
+  const sentenceEnd = afterStops.length ? Math.min(...afterStops) : after.length;
+  return text.slice(sentenceStart + 1, startIndex + word.length + sentenceEnd + (afterStops.length ? 1 : 0)).trim();
+}
+
+async function lookupGermanArticle(word: string): Promise<Article> {
+  const title = word.charAt(0).toLocaleUpperCase("de-DE") + word.slice(1);
+  const params = new URLSearchParams({
+    action: "query",
+    prop: "revisions",
+    titles: title,
+    rvprop: "content",
+    rvslots: "main",
+    format: "json",
+    origin: "*",
+  });
+
+  try {
+    const response = await fetch(`https://de.wiktionary.org/w/api.php?${params.toString()}`);
+    if (!response.ok) return "";
+    const payload = await response.json() as {
+      query?: { pages?: Record<string, { revisions?: Array<{ slots?: { main?: { "*": string } } }> }> };
+    };
+    const page = Object.values(payload.query?.pages ?? {})[0];
+    const content = page?.revisions?.[0]?.slots?.main?.["*"] ?? "";
+    const genus = content.match(/\|\s*Genus\s*=\s*([mfn])/i)?.[1]?.toLocaleLowerCase("de-DE");
+    if (genus === "m") return "der";
+    if (genus === "f") return "die";
+    if (genus === "n") return "das";
+    return "";
+  } catch {
+    return "";
+  }
+}
+
+async function lookupEnglishHint(word: string) {
+  try {
+    const response = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLocaleLowerCase("en"))}`);
+    if (!response.ok) return "";
+    const payload = await response.json() as Array<{
+      meanings?: Array<{ partOfSpeech?: string; definitions?: Array<{ definition?: string }> }>;
+    }>;
+    const meaning = payload[0]?.meanings?.[0];
+    const definition = meaning?.definitions?.[0]?.definition;
+    return definition ? `${meaning.partOfSpeech ?? "word"}: ${definition}` : "";
+  } catch {
+    return "";
+  }
+}
+
 function updateCardAfterReview(card: Card, grade: ReviewGrade): Card {
   const wasCorrect = grade !== "again";
   const currentStep = completedReviewStep(card);
@@ -291,7 +472,7 @@ function parseTrainerImport(text: string): Array<Pick<TrainerItem, "russian" | "
   const rows = lines.map((line) => line.split(separator).map((part) => part.trim()));
   const header = rows[0]?.map((cell) => cell.toLocaleLowerCase("ru"));
   const russianIndex = header?.findIndex((cell) => ["русский", "ru", "russian", "prompt"].includes(cell)) ?? -1;
-  const germanIndex = header?.findIndex((cell) => ["немецкий", "de", "german", "answer"].includes(cell)) ?? -1;
+  const germanIndex = header?.findIndex((cell) => ["немецкий", "английский", "de", "en", "german", "english", "answer"].includes(cell)) ?? -1;
   const hasHeader = russianIndex >= 0 && germanIndex >= 0;
 
   return rows
@@ -323,19 +504,21 @@ export function App() {
   const [cards, setCards] = usePersistentState<Card[]>(CARD_KEY, []);
   const [trainerItems, setTrainerItems] = usePersistentState<TrainerItem[]>(TRAINER_KEY, []);
   const [streak, setStreak] = usePersistentState<StreakState>(STREAK_KEY, { count: 0, lastStudyDate: "" });
-  const [theme, setTheme] = usePersistentState<Theme>(THEME_KEY, "rainy");
+  const [readerText, setReaderText] = usePersistentState(READER_KEY, "");
   const [session, setSession] = useState<Session | null>(null);
   const [authChecked, setAuthChecked] = useState(!isSupabaseConfigured);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(isSupabaseConfigured ? "loading" : "local");
   const [syncMessage, setSyncMessage] = useState("");
   const hasLoadedCloud = useRef(false);
 
-  const cloudState = useMemo<CloudState>(() => ({ cards, trainerItems, streak }), [cards, trainerItems, streak]);
+  const cloudState = useMemo<CloudState>(() => ({ cards, trainerItems, streak, readerText }), [cards, trainerItems, streak, readerText]);
   const didNormalizeSchedules = useRef(false);
+  const theme = themeForEmail(session?.user.email);
+  const themeCopy = LEARNING_THEMES[theme];
 
   useEffect(() => {
-    document.body.dataset.theme = theme;
-  }, [theme]);
+    document.body.dataset.theme = session ? theme : "auth";
+  }, [session, theme]);
 
   useEffect(() => {
     if (didNormalizeSchedules.current) return;
@@ -390,6 +573,7 @@ export function App() {
           setCards((remote.cards ?? []).map(normalizeCardSchedule));
           setTrainerItems((remote.trainerItems ?? []).map(normalizeTrainerSchedule));
           setStreak(remote.streak ?? { count: 0, lastStudyDate: "" });
+          setReaderText(remote.readerText ?? "");
         } else {
           await client.from("language_app_state").upsert({
             user_id: session.user.id,
@@ -406,7 +590,7 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, [session, setCards, setTrainerItems, setStreak, cloudState]);
+  }, [session, setCards, setTrainerItems, setStreak, setReaderText, cloudState]);
 
   useEffect(() => {
     if (!supabase || !session || !hasLoadedCloud.current) return;
@@ -460,7 +644,7 @@ export function App() {
     setStreak({ count: continued ? streak.count + 1 : 1, lastStudyDate: current });
   };
 
-  const addCard = (card: NewCardInput) => {
+  const addCard = (card: NewCardInput, nextTab: Tab = "review") => {
     const nextCard: Card = {
       ...card,
       id: uid(),
@@ -474,7 +658,7 @@ export function App() {
       streak: 0,
     };
     setCards((current) => [nextCard, ...current]);
-    setTab("review");
+    setTab(nextTab);
   };
 
   const reviewCard = (id: string, grade: ReviewGrade) => {
@@ -517,16 +701,17 @@ export function App() {
     setCards([]);
     setTrainerItems([]);
     setStreak({ count: 0, lastStudyDate: "" });
+    setReaderText("");
   };
 
   if (isSupabaseConfigured && !authChecked) {
     return (
       <div className="auth-shell">
         <div className="brand auth-brand">
-          <div className="brand-mark">D</div>
+          <div className="brand-mark">{AUTH_BRAND.brandMark}</div>
           <div>
-            <p className="eyebrow">личный немецкий</p>
-            <h1>Deutsch Trainer</h1>
+            <p className="eyebrow">{AUTH_BRAND.eyebrow}</p>
+            <h1>{AUTH_BRAND.title}</h1>
           </div>
         </div>
         <div className="auth-card">
@@ -541,10 +726,10 @@ export function App() {
     return (
       <div className="auth-shell">
         <div className="brand auth-brand">
-          <div className="brand-mark">D</div>
+          <div className="brand-mark">{AUTH_BRAND.brandMark}</div>
           <div>
-            <p className="eyebrow">личный немецкий</p>
-            <h1>Deutsch Trainer</h1>
+            <p className="eyebrow">{AUTH_BRAND.eyebrow}</p>
+            <h1>{AUTH_BRAND.title}</h1>
           </div>
         </div>
         <SyncPanel session={session} syncStatus={syncStatus} syncMessage={syncMessage} onSignedOut={clearLocalState} />
@@ -556,15 +741,16 @@ export function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">D</div>
+          <div className="brand-mark">{themeCopy.brandMark}</div>
           <div>
-            <p className="eyebrow">личный немецкий</p>
-            <h1>Deutsch Trainer</h1>
+            <p className="eyebrow">{themeCopy.eyebrow}</p>
+            <h1>{themeCopy.title}</h1>
           </div>
         </div>
 
         <nav className="nav-list" aria-label="Основная навигация">
           <TabButton icon={<Brain />} label="Повторение" active={tab === "review"} onClick={() => setTab("review")} badge={dueCards.length} />
+          <TabButton icon={<FileText />} label="Чтение" active={tab === "reader"} onClick={() => setTab("reader")} />
           <TabButton icon={<Plus />} label="Добавить" active={tab === "add"} onClick={() => setTab("add")} />
           <TabButton icon={<BookOpen />} label="Словарь" active={tab === "dictionary"} onClick={() => setTab("dictionary")} />
           <TabButton icon={<Dumbbell />} label="Тренажер" active={tab === "trainer"} onClick={() => setTab("trainer")} badge={dueTrainerItems.length} />
@@ -585,14 +771,17 @@ export function App() {
           due={dueCards.length}
           difficult={difficultCards}
           total={cards.length}
+          themeCopy={themeCopy}
           onQuickAdd={() => setTab("add")}
         />
 
-        {tab === "review" && <ReviewView cards={dueCards} allCards={cards} onReview={reviewCard} onAdd={() => setTab("add")} />}
-        {tab === "add" && <AddCardView onAdd={addCard} />}
-        {tab === "dictionary" && <DictionaryView cards={cards} onDelete={deleteCard} />}
+        {tab === "review" && <ReviewView themeCopy={themeCopy} cards={dueCards} allCards={cards} onReview={reviewCard} onAdd={() => setTab("add")} />}
+        {tab === "reader" && <ReaderView theme={theme} themeCopy={themeCopy} text={readerText} onTextChange={setReaderText} onAdd={(card) => addCard(card, "reader")} />}
+        {tab === "add" && <AddCardView themeCopy={themeCopy} onAdd={addCard} />}
+        {tab === "dictionary" && <DictionaryView themeCopy={themeCopy} cards={cards} onDelete={deleteCard} />}
         {tab === "trainer" && (
           <TrainerView
+            themeCopy={themeCopy}
             items={dueTrainerItems}
             totalCount={trainerItems.length}
             onImport={importTrainerItems}
@@ -601,8 +790,8 @@ export function App() {
         )}
         {tab === "settings" && (
           <SettingsView
-            theme={theme}
-            onThemeChange={setTheme}
+            themeCopy={themeCopy}
+            email={session?.user.email ?? ""}
             cardsCount={cards.length}
             trainerCount={trainerItems.length}
             dueCards={dueCards.length}
@@ -767,11 +956,23 @@ function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string
   );
 }
 
-function Header({ due, difficult, total, onQuickAdd }: { due: number; difficult: number; total: number; onQuickAdd: () => void }) {
+function Header({
+  due,
+  difficult,
+  total,
+  themeCopy,
+  onQuickAdd,
+}: {
+  due: number;
+  difficult: number;
+  total: number;
+  themeCopy: (typeof LEARNING_THEMES)[Theme];
+  onQuickAdd: () => void;
+}) {
   return (
     <section className="top-band">
       <div>
-        <p className="eyebrow">Heute</p>
+        <p className="eyebrow">{themeCopy.todayLabel}</p>
         <h2>Сегодня к повторению {due} карточек</h2>
         <p className="muted">
           В словаре {total} слов, проблемных сейчас {difficult}. Очередь пересчитывается после каждой самопроверки.
@@ -786,11 +987,13 @@ function Header({ due, difficult, total, onQuickAdd }: { due: number; difficult:
 }
 
 function ReviewView({
+  themeCopy,
   cards,
   allCards,
   onReview,
   onAdd,
 }: {
+  themeCopy: (typeof LEARNING_THEMES)[Theme];
   cards: Card[];
   allCards: Card[];
   onReview: (id: string, grade: ReviewGrade) => void;
@@ -804,7 +1007,7 @@ function ReviewView({
       <section className="empty-state">
         <Sparkles size={28} />
         <h3>{allCards.length ? "На сегодня все повторено" : "Пока нет карточек"}</h3>
-        <p>{allCards.length ? "Можно добавить новые слова или перейти в тренажер предложений." : "Добавь первое немецкое слово, и оно сразу появится в очереди."}</p>
+        <p>{allCards.length ? "Можно добавить новые слова или перейти в тренажер предложений." : themeCopy.emptyCardHint}</p>
         <button className="primary-button" onClick={onAdd}>
           <Plus size={18} />
           <span>Добавить слово</span>
@@ -825,7 +1028,7 @@ function ReviewView({
           <span>{strengthLabel(card)}</span>
           <span className="tabular">{accuracy(card.correct, card.attempts)}%</span>
         </div>
-        <p className="prompt-label">Переведи на немецкий</p>
+        <p className="prompt-label">{themeCopy.reviewPrompt}</p>
         <h3>{card.russian}</h3>
         {card.example && <p className="context-line">{card.example}</p>}
 
@@ -867,7 +1070,174 @@ function ReviewView({
   );
 }
 
-function AddCardView({ onAdd }: { onAdd: (card: NewCardInput) => void }) {
+function ReaderView({
+  theme,
+  themeCopy,
+  text,
+  onTextChange,
+  onAdd,
+}: {
+  theme: Theme;
+  themeCopy: (typeof LEARNING_THEMES)[Theme];
+  text: string;
+  onTextChange: (text: string) => void;
+  onAdd: (card: NewCardInput) => void;
+}) {
+  const [selected, setSelected] = useState<{ word: string; context: string } | null>(null);
+  const [targetWord, setTargetWord] = useState("");
+  const [translation, setTranslation] = useState("");
+  const [grammar, setGrammar] = useState("");
+  const [lookupStatus, setLookupStatus] = useState<"idle" | "loading" | "done">("idle");
+  const [saved, setSaved] = useState("");
+  const tokens = useMemo(() => tokenizeText(text), [text]);
+
+  useEffect(() => {
+    if (!selected) return;
+    let cancelled = false;
+
+    setTargetWord(selected.word);
+    setTranslation("");
+    setGrammar("");
+    setSaved("");
+    setLookupStatus("loading");
+
+    if (theme === "sekta") {
+      lookupGermanArticle(selected.word).then((article) => {
+        if (cancelled) return;
+        setTargetWord(article ? `${article} ${selected.word}` : selected.word);
+        setGrammar(article ? `Артикль найден автоматически: ${article}` : "");
+        setLookupStatus("done");
+      });
+    } else {
+      lookupEnglishHint(selected.word).then((hint) => {
+        if (cancelled) return;
+        setGrammar(hint);
+        setLookupStatus("done");
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, theme]);
+
+  const selectWord = (word: string, tokenStart: number) => {
+    const cleaned = cleanReaderWord(word);
+    if (!cleaned) return;
+    setSelected({
+      word: cleaned,
+      context: sentenceContext(text, cleaned, tokenStart),
+    });
+  };
+
+  const uploadText = (file: File | undefined) => {
+    if (!file) return;
+    file.text().then(onTextChange);
+  };
+
+  const saveCard = () => {
+    if (!selected || !targetWord.trim() || !translation.trim()) return;
+    onAdd({
+      russian: translation.trim(),
+      german: targetWord.trim(),
+      plural: "",
+      grammar: grammar.trim(),
+      example: selected.context,
+      lastReviewedAt: undefined,
+    });
+    setSaved(`${targetWord.trim()} добавлено`);
+  };
+
+  let cursor = 0;
+
+  return (
+    <section className="reader-section">
+      <div className="section-toolbar">
+        <div>
+          <p className="eyebrow">{theme === "sekta" ? "Lesezimmer" : "Reading Room"}</p>
+          <h3>Чтение</h3>
+        </div>
+        <label className="secondary-button file-button">
+          <Import size={18} />
+          <span>TXT</span>
+          <input type="file" accept=".txt,text/plain" onChange={(event) => uploadText(event.target.files?.[0])} />
+        </label>
+      </div>
+
+      <div className="reader-layout">
+        {selected && (
+          <div className="reader-lookup">
+            <div className="lookup-head">
+              <div>
+                <p className="eyebrow">{lookupStatus === "loading" ? "ищу подсказку" : "карточка из текста"}</p>
+                <h4>{selected.word}</h4>
+              </div>
+              <button className="icon-button" onClick={() => setSelected(null)} aria-label="Закрыть карточку">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="reader-form-grid">
+              <label>
+                <span>{themeCopy.targetLabel}</span>
+                <input value={targetWord} onChange={(event) => setTargetWord(event.target.value)} />
+              </label>
+              <label>
+                <span>Перевод на русский</span>
+                <input value={translation} onChange={(event) => setTranslation(event.target.value)} placeholder="впиши перевод перед сохранением" />
+              </label>
+            </div>
+            <label>
+              <span>Контекст</span>
+              <textarea value={selected.context} readOnly />
+            </label>
+            <label>
+              <span>Подсказка / грамматика</span>
+              <textarea value={grammar} onChange={(event) => setGrammar(event.target.value)} placeholder={theme === "sekta" ? "Артикль подтянется автоматически, если Wiktionary его отдаст" : "Здесь может появиться английская подсказка из бесплатного словаря"} />
+            </label>
+            <div className="trainer-actions">
+              <button className="primary-button" onClick={saveCard} disabled={!targetWord.trim() || !translation.trim()}>
+                <Plus size={18} />
+                <span>Добавить карточку</span>
+              </button>
+              {saved && <span className="save-note">{saved}</span>}
+            </div>
+          </div>
+        )}
+
+        <div className="reader-editor">
+          <textarea
+            value={text}
+            onChange={(event) => onTextChange(event.target.value)}
+            placeholder={theme === "sekta" ? "Вставь немецкий текст. Потом нажимай на незнакомые слова." : "Вставь английский текст B1-C1. Потом нажимай на незнакомые слова."}
+          />
+        </div>
+
+        <div className="reader-text" aria-label="Текст для чтения">
+          {!text.trim() ? (
+            <div className="empty-state compact">
+              <FileText size={28} />
+              <h3>Вставь текст</h3>
+              <p>Слова станут кликабельными, а карточка для добавления появится над текстом.</p>
+            </div>
+          ) : (
+            tokens.map((token, index) => {
+              const tokenStart = cursor;
+              cursor += token.length;
+              if (!isWordToken(token)) return <span key={`${token}-${index}`}>{token}</span>;
+              return (
+                <button className="reader-word" key={`${token}-${index}`} onClick={() => selectWord(token, tokenStart)}>
+                  {token}
+                </button>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function AddCardView({ themeCopy, onAdd }: { themeCopy: (typeof LEARNING_THEMES)[Theme]; onAdd: (card: NewCardInput) => void }) {
   const [form, setForm] = useState({
     russian: "",
     german: "",
@@ -893,9 +1263,9 @@ function AddCardView({ onAdd }: { onAdd: (card: NewCardInput) => void }) {
   return (
     <section className="form-section">
       <div className="section-heading">
-        <p className="eyebrow">Neue Karte</p>
+        <p className="eyebrow">{themeCopy.addEyebrow}</p>
         <h3>Добавить карточку</h3>
-        <p className="muted">Пиши артикль прямо в начале немецкого поля: `der Tisch`, `die Tasche`, `das Obst`. Приложение подсветит его само.</p>
+        <p className="muted">{themeCopy.addHint}</p>
       </div>
 
       <form className="card-form" onSubmit={submit}>
@@ -904,20 +1274,20 @@ function AddCardView({ onAdd }: { onAdd: (card: NewCardInput) => void }) {
           <input value={form.russian} onChange={(event) => setForm({ ...form, russian: event.target.value })} placeholder="дом" />
         </label>
         <label>
-          <span>Немецкий с артиклем, если нужен</span>
-          <input value={form.german} onChange={(event) => setForm({ ...form, german: event.target.value })} placeholder="das Haus" />
+          <span>{themeCopy.targetLabel}</span>
+          <input value={form.german} onChange={(event) => setForm({ ...form, german: event.target.value })} placeholder={themeCopy.targetPlaceholder} />
         </label>
         <label>
-          <span>Plural / форма</span>
-          <input value={form.plural} onChange={(event) => setForm({ ...form, plural: event.target.value })} placeholder="die Häuser" />
+          <span>{themeCopy.formLabel}</span>
+          <input value={form.plural} onChange={(event) => setForm({ ...form, plural: event.target.value })} placeholder={themeCopy.formPlaceholder} />
         </label>
         <label>
-          <span>Мини-грамматика</span>
-          <input value={form.grammar} onChange={(event) => setForm({ ...form, grammar: event.target.value })} placeholder="например: kaufen + Akkusativ" />
+          <span>{themeCopy.formExtraLabel}</span>
+          <input value={form.grammar} onChange={(event) => setForm({ ...form, grammar: event.target.value })} placeholder={themeCopy.formExtraPlaceholder} />
         </label>
         <label>
-          <span>Пример на немецком</span>
-          <textarea value={form.example} onChange={(event) => setForm({ ...form, example: event.target.value })} placeholder="Das Haus ist sehr alt." />
+          <span>{themeCopy.exampleLabel}</span>
+          <textarea value={form.example} onChange={(event) => setForm({ ...form, example: event.target.value })} placeholder={themeCopy.examplePlaceholder} />
         </label>
         <button className="primary-button" type="submit">
           <Plus size={18} />
@@ -928,7 +1298,7 @@ function AddCardView({ onAdd }: { onAdd: (card: NewCardInput) => void }) {
   );
 }
 
-function DictionaryView({ cards, onDelete }: { cards: Card[]; onDelete: (id: string) => void }) {
+function DictionaryView({ themeCopy, cards, onDelete }: { themeCopy: (typeof LEARNING_THEMES)[Theme]; cards: Card[]; onDelete: (id: string) => void }) {
   const [query, setQuery] = useState("");
   const filtered = cards.filter((card) => `${card.russian} ${card.german} ${card.example}`.toLocaleLowerCase("ru").includes(query.toLocaleLowerCase("ru")));
 
@@ -936,7 +1306,7 @@ function DictionaryView({ cards, onDelete }: { cards: Card[]; onDelete: (id: str
     <section className="dictionary-section">
       <div className="section-toolbar">
         <div>
-          <p className="eyebrow">Wortschatz</p>
+          <p className="eyebrow">{themeCopy.dictionaryEyebrow}</p>
           <h3>Словарь</h3>
         </div>
         <label className="search-box">
@@ -977,11 +1347,13 @@ function DictionaryView({ cards, onDelete }: { cards: Card[]; onDelete: (id: str
 }
 
 function TrainerView({
+  themeCopy,
   items,
   totalCount,
   onImport,
   onAnswer,
 }: {
+  themeCopy: (typeof LEARNING_THEMES)[Theme];
   items: TrainerItem[];
   totalCount: number;
   onImport: (items: Array<Pick<TrainerItem, "russian" | "german">>) => void;
@@ -1023,8 +1395,8 @@ function TrainerView({
     <section className="trainer-section">
       <div className="section-toolbar">
         <div>
-          <p className="eyebrow">Satztraining</p>
-          <h3>Тренажер предложений</h3>
+          <p className="eyebrow">{themeCopy.trainerEyebrow}</p>
+          <h3>{themeCopy.trainerTitle}</h3>
         </div>
         <button className="secondary-button" onClick={() => setShowImport((value) => !value)}>
           <Import size={18} />
@@ -1035,12 +1407,12 @@ function TrainerView({
       {showImport && (
         <div className="import-panel">
           <p className="muted">
-            Вставь таблицу с колонками `Русский` и `Немецкий`, строки русский + Tab + немецкий, CSV через `;` или JSON: {`[{"ru":"Я иду домой","de":"Ich gehe nach Hause"}]`}.
+            {themeCopy.trainerImportHint}
           </p>
           <textarea
             value={importText}
             onChange={(event) => setImportText(event.target.value)}
-            placeholder={"Я покупаю хлеб.\tIch kaufe Brot.\nМы живем в Берлине.;Wir wohnen in Berlin."}
+            placeholder={themeCopy.trainerImportPlaceholder}
           />
           <button className="primary-button" onClick={submitImport} disabled={!parsedCount}>
             <Import size={18} />
@@ -1053,7 +1425,7 @@ function TrainerView({
         <div className="empty-state compact">
           <Dumbbell size={28} />
           <h3>Загрузи первые предложения</h3>
-          <p>После импорта приложение будет показывать русский вариант, а ты будешь писать немецкий и сравнивать с эталоном.</p>
+          <p>{themeCopy.trainerEmptyHint}</p>
         </div>
       ) : !items.length ? (
         <div className="empty-state compact">
@@ -1068,9 +1440,9 @@ function TrainerView({
               <span className="tabular">{currentIndex + 1}/{items.length}</span>
               <span className="tabular">{accuracy(current.correct, current.attempts)}%</span>
             </div>
-            <p className="prompt-label">Напиши по-немецки</p>
+            <p className="prompt-label">{themeCopy.trainerPrompt}</p>
             <h3>{current.russian}</h3>
-            <textarea value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder="Deine Antwort..." />
+            <textarea value={answer} onChange={(event) => setAnswer(event.target.value)} placeholder={themeCopy.trainerAnswerPlaceholder} />
             <div className="trainer-actions">
               <button className="primary-button" onClick={() => setChecked(true)} disabled={!answer.trim()}>
                 <Check size={18} />
@@ -1088,7 +1460,7 @@ function TrainerView({
               <>
                 <CalendarClock size={22} />
                 <h4>Пока скрыто</h4>
-                <p>Сначала напиши вариант, потом сравним его с сохраненным немецким предложением.</p>
+                <p>{themeCopy.trainerHiddenHint}</p>
               </>
             ) : (
               <>
@@ -1121,16 +1493,16 @@ function TrainerView({
 }
 
 function SettingsView({
-  theme,
-  onThemeChange,
+  themeCopy,
+  email,
   cardsCount,
   trainerCount,
   dueCards,
   dueTrainerItems,
   onClearTrainer,
 }: {
-  theme: Theme;
-  onThemeChange: (theme: Theme) => void;
+  themeCopy: (typeof LEARNING_THEMES)[Theme];
+  email: string;
   cardsCount: number;
   trainerCount: number;
   dueCards: number;
@@ -1152,15 +1524,15 @@ function SettingsView({
 
       <div className="settings-grid">
         <div className="settings-card">
-          <h4>Тема</h4>
-          <div className="theme-switch" role="group" aria-label="Выбор темы">
-            <button className={theme === "rainy" ? "is-active" : ""} onClick={() => onThemeChange("rainy")}>
-              Rainy London
-            </button>
-            <button className={theme === "classic" ? "is-active" : ""} onClick={() => onThemeChange("classic")}>
-              Classic
-            </button>
+          <h4>Профиль</h4>
+          <div className="profile-card">
+            <span className="profile-mark">{themeCopy.brandMark}</span>
+            <div>
+              <strong>{themeCopy.title}</strong>
+              <p>{themeCopy.languageName} · {themeCopy.vibeName}</p>
+            </div>
           </div>
+          <p className="muted">{email}</p>
         </div>
 
         <div className="settings-card">
