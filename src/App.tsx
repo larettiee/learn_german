@@ -102,6 +102,8 @@ const REVIEW_INTERVALS = [1 / 24, 3 / 24, 12 / 24, 1, 3, 7, 14, 30];
 const LEARNING_PHASE_STEPS = 4;
 const TRAINER_BATCH_SIZE = 10;
 const TRAINER_MASTERY_STREAK = 3;
+const READER_PAGE_CHARS = 1600;
+const DICTIONARY_PAGE_SIZE = 80;
 
 const LEARNING_THEMES: Record<
   Theme,
@@ -376,6 +378,26 @@ function GermanTerm({ value, className = "" }: { value: string; className?: stri
 
 function tokenizeText(text: string) {
   return text.match(/[\p{L}\p{M}]+(?:[-'][\p{L}\p{M}]+)*|[^\p{L}\p{M}]+/gu) ?? [];
+}
+
+function readerPageStartFor(text: string, position: number) {
+  if (text.length <= READER_PAGE_CHARS) return 0;
+  const safePosition = Math.max(0, Math.min(position, text.length - 1));
+  return Math.max(0, Math.min(Math.floor(safePosition / READER_PAGE_CHARS) * READER_PAGE_CHARS, text.length - READER_PAGE_CHARS));
+}
+
+function readerPageFor(text: string, start: number) {
+  const pageStart = readerPageStartFor(text, start);
+  let pageEnd = Math.min(text.length, pageStart + READER_PAGE_CHARS);
+  if (pageEnd < text.length) {
+    const softBreak = Math.max(text.lastIndexOf("\n", pageEnd), text.lastIndexOf(". ", pageEnd), text.lastIndexOf("! ", pageEnd), text.lastIndexOf("? ", pageEnd));
+    if (softBreak > pageStart + READER_PAGE_CHARS * 0.55) pageEnd = softBreak + 1;
+  }
+  return {
+    end: pageEnd,
+    start: pageStart,
+    text: text.slice(pageStart, pageEnd),
+  };
 }
 
 function isWordToken(token: string) {
@@ -1430,9 +1452,13 @@ function ReaderView({
   const [grammar, setGrammar] = useState("");
   const [lookupStatus, setLookupStatus] = useState<"idle" | "loading" | "done">("idle");
   const [saved, setSaved] = useState("");
+  const [pageStart, setPageStart] = useState(0);
   const activeBook = books.find((book) => book.id === activeBookId) ?? books[0];
   const text = activeBook?.text ?? "";
-  const tokens = useMemo(() => tokenizeText(text), [text]);
+  const page = useMemo(() => readerPageFor(text, pageStart), [pageStart, text]);
+  const tokens = useMemo(() => tokenizeText(page.text), [page.text]);
+  const hasPreviousPage = page.start > 0;
+  const hasNextPage = page.end < text.length;
 
   useEffect(() => {
     if (!selected) return;
@@ -1467,7 +1493,13 @@ function ReaderView({
   useEffect(() => {
     setSelected(null);
     setSaved("");
+    setPageStart(activeBook ? readerPageStartFor(activeBook.text, activeBook.position) : 0);
   }, [activeBookId]);
+
+  useEffect(() => {
+    if (!activeBook) return;
+    setPageStart((current) => readerPageStartFor(activeBook.text, Math.min(current, Math.max(activeBook.text.length - 1, 0))));
+  }, [activeBook?.id, activeBook?.text.length]);
 
   useEffect(() => {
     if (!books.length) setShowNewBook(true);
@@ -1518,7 +1550,7 @@ function ReaderView({
 
   const savePlace = () => {
     if (!activeBook) return;
-    onUpdateBook(activeBook.id, { position: selected?.offset ?? activeBook.position });
+    onUpdateBook(activeBook.id, { position: selected?.offset ?? page.start });
     setSaved("Место сохранено");
   };
 
@@ -1532,15 +1564,22 @@ function ReaderView({
 
   const jumpToSaved = () => {
     if (!activeBook) return;
-    const savedPosition = clampBookPosition(activeBook);
-    const words = Array.from(document.querySelectorAll<HTMLElement>("[data-reader-offset]"));
-    const target =
-      words.find((element) => Number(element.dataset.readerOffset ?? 0) >= savedPosition) ??
-      words.at(-1);
-    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    setPageStart(readerPageStartFor(activeBook.text, clampBookPosition(activeBook)));
+    document.querySelector(".reader-text")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  let cursor = 0;
+  const goToPreviousPage = () => {
+    if (!activeBook) return;
+    const nextStart = Math.max(0, page.start - READER_PAGE_CHARS);
+    setPageStart(readerPageStartFor(activeBook.text, nextStart));
+  };
+
+  const goToNextPage = () => {
+    if (!activeBook) return;
+    setPageStart(readerPageStartFor(activeBook.text, page.end));
+  };
+
+  let cursor = page.start;
 
   return (
     <section className="reader-section">
@@ -1667,6 +1706,20 @@ function ReaderView({
           </div>
         )}
 
+        {activeBook && (
+          <div className="reader-page-controls">
+            <button className="secondary-button" onClick={goToPreviousPage} disabled={!hasPreviousPage}>
+              <ArrowRight className="is-back" size={18} />
+              <span>Назад</span>
+            </button>
+            <span className="tabular">{Math.min(100, Math.round((page.end / Math.max(text.length, 1)) * 100))}% текста</span>
+            <button className="secondary-button" onClick={goToNextPage} disabled={!hasNextPage}>
+              <ArrowRight size={18} />
+              <span>Дальше</span>
+            </button>
+          </div>
+        )}
+
         <div className="reader-text" aria-label="Текст для чтения">
           {!activeBook ? (
             <div className="empty-state compact">
@@ -1765,6 +1818,7 @@ function DictionaryView({
   onDelete: (id: string) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(DICTIONARY_PAGE_SIZE);
   const [editingId, setEditingId] = useState("");
   const [draft, setDraft] = useState<Pick<Card, "russian" | "german" | "plural" | "grammar" | "example" | "association">>({
     russian: "",
@@ -1774,7 +1828,15 @@ function DictionaryView({
     example: "",
     association: "",
   });
-  const filtered = cards.filter((card) => `${card.russian} ${card.german} ${card.example}`.toLocaleLowerCase("ru").includes(query.toLocaleLowerCase("ru")));
+  const filtered = useMemo(
+    () => cards.filter((card) => `${card.russian} ${card.german} ${card.example}`.toLocaleLowerCase("ru").includes(query.toLocaleLowerCase("ru"))),
+    [cards, query],
+  );
+  const visibleCards = filtered.slice(0, visibleCount);
+
+  useEffect(() => {
+    setVisibleCount(DICTIONARY_PAGE_SIZE);
+  }, [query, cards.length]);
 
   const startEdit = (card: Card) => {
     setEditingId(card.id);
@@ -1821,7 +1883,7 @@ function DictionaryView({
           <span>Следующий раз</span>
           <span></span>
         </div>
-        {filtered.map((card) => {
+        {visibleCards.map((card) => {
           const isEditing = editingId === card.id;
           return (
             <div className={`word-row ${isEditing ? "is-editing" : ""}`} key={card.id}>
@@ -1889,6 +1951,11 @@ function DictionaryView({
             </div>
           );
         })}
+        {visibleCards.length < filtered.length && (
+          <button className="secondary-button dictionary-more" onClick={() => setVisibleCount((count) => count + DICTIONARY_PAGE_SIZE)}>
+            <span>Показать ещё {Math.min(DICTIONARY_PAGE_SIZE, filtered.length - visibleCards.length)}</span>
+          </button>
+        )}
       </div>
     </section>
   );
