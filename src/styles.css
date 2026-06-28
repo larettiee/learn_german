@@ -939,7 +939,9 @@ body[data-theme="viper"] .profile-mark {
 .flip-inner {
   position: relative;
   min-height: 430px;
+  isolation: isolate;
   transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
   transition-property: transform;
   transition-duration: 360ms;
   transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
@@ -961,11 +963,30 @@ body[data-theme="viper"] .profile-mark {
   background: var(--panel-bg);
   border-radius: 18px;
   box-shadow: var(--shadow-border);
+  opacity: 1;
+  pointer-events: auto;
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
   backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transition-property: opacity, visibility;
+  transition-duration: 120ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.card-front {
+  transform: rotateY(0deg) translateZ(1px);
 }
 
 .card-back {
-  transform: rotateY(180deg);
+  transform: rotateY(180deg) translateZ(1px);
+}
+
+.flip-card:not(.is-flipped) .card-back,
+.flip-card.is-flipped .card-front {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
 }
 
 .swipe-card {
