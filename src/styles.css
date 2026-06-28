@@ -89,6 +89,12 @@ body[data-theme="viper"] {
   box-sizing: border-box;
 }
 
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 body {
   min-width: 320px;
   margin: 0;
@@ -595,6 +601,7 @@ button svg {
   width: min(1120px, 100%);
   margin: 0 auto;
   padding: 28px;
+  overflow-x: hidden;
 }
 
 .top-band,
@@ -920,6 +927,7 @@ body[data-theme="viper"] .profile-mark {
 .review-layout {
   display: grid;
   gap: 14px;
+  overflow-x: clip;
 }
 
 .review-card {
@@ -1536,7 +1544,7 @@ textarea:focus {
 .table-head,
 .word-row {
   display: grid;
-  grid-template-columns: minmax(220px, 1.4fr) minmax(150px, 0.9fr) minmax(140px, 0.8fr) 44px;
+  grid-template-columns: minmax(220px, 1.4fr) minmax(150px, 0.9fr) minmax(140px, 0.8fr) 88px;
   align-items: center;
   gap: 12px;
 }
@@ -1564,6 +1572,39 @@ textarea:focus {
 .word-row p {
   color: var(--muted);
   font-size: 0.92rem;
+}
+
+.word-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.word-row.is-editing {
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+.dictionary-edit-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.dictionary-edit-form textarea {
+  min-height: 96px;
+}
+
+.dictionary-edit-form label:nth-child(5),
+.dictionary-edit-form label:nth-child(6),
+.dictionary-edit-actions {
+  grid-column: 1 / -1;
+}
+
+.dictionary-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .status {
@@ -2086,6 +2127,15 @@ body[data-theme="viper"] textarea {
     grid-template-columns: 1fr;
   }
 
+  .app-shell.is-review-app .sidebar .brand,
+  .app-shell.is-review-app .sidebar > .sync-panel {
+    display: none;
+  }
+
+  .app-shell.is-review-app .sidebar {
+    padding: 0;
+  }
+
   .sidebar {
     position: static;
     height: auto;
@@ -2238,6 +2288,82 @@ body[data-theme="viper"] textarea {
   }
 
   .top-band,
+  .review-layout,
+  .form-section,
+  .dictionary-section,
+  .reader-section,
+  .trainer-section,
+  .settings-section,
+  .empty-state {
+    opacity: 1;
+    filter: none;
+    transform: none;
+    animation: none;
+  }
+
+  .main-panel.is-review-mode {
+    gap: 8px;
+    min-height: 100dvh;
+    padding: 8px 12px 96px;
+  }
+
+  .main-panel.is-review-mode .top-band,
+  .main-panel.is-review-mode .review-layout {
+    opacity: 1;
+    filter: none;
+    transform: none;
+    animation: none;
+  }
+
+  .main-panel.is-review-mode .top-band {
+    display: grid;
+    grid-template-columns: 1fr 44px;
+    align-items: center;
+    gap: 10px;
+    min-height: 0 !important;
+    padding: 10px 12px;
+    overflow: hidden;
+    border-radius: 14px;
+  }
+
+  .main-panel.is-review-mode .top-band::before,
+  .main-panel.is-review-mode .top-band::after {
+    display: none;
+  }
+
+  .main-panel.is-review-mode .top-band .muted {
+    display: none;
+  }
+
+  .main-panel.is-review-mode .top-band h2,
+  body[data-theme="sekta"] .main-panel.is-review-mode .top-band h2,
+  body[data-theme="viper"] .main-panel.is-review-mode .top-band h2 {
+    font-family: inherit;
+    font-size: 1rem;
+    font-style: normal;
+    line-height: 1.15;
+    text-shadow: none;
+  }
+
+  .quick-add-button {
+    justify-self: end;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    padding: 0;
+    border-radius: 14px;
+  }
+
+  .quick-add-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .top-band,
   .section-toolbar {
     align-items: stretch;
     flex-direction: column;
@@ -2274,12 +2400,37 @@ body[data-theme="viper"] textarea {
     gap: 8px;
   }
 
+  .main-panel.is-review-mode .review-layout {
+    gap: 8px;
+    min-height: 0;
+  }
+
+  .main-panel.is-review-mode .flip-inner,
+  .main-panel.is-review-mode .card-face {
+    min-height: min(58dvh, 430px);
+  }
+
+  .main-panel.is-review-mode .card-face {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  .main-panel.is-review-mode .grade-grid {
+    position: sticky;
+    bottom: 90px;
+    z-index: 4;
+  }
+
   .table-head {
     display: none;
   }
 
   .word-row {
-    grid-template-columns: 1fr 1fr 44px;
+    grid-template-columns: 1fr 1fr 88px;
+  }
+
+  .dictionary-edit-form {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -2337,10 +2488,27 @@ body[data-theme="viper"] textarea {
     font-size: 2.55rem;
   }
 
+  .main-panel.is-review-mode .top-band,
+  body[data-theme="sekta"] .main-panel.is-review-mode .top-band,
+  body[data-theme="viper"] .main-panel.is-review-mode .top-band {
+    min-height: 0;
+    padding: 10px 12px;
+  }
+
+  .main-panel.is-review-mode .top-band h2,
+  body[data-theme="sekta"] .main-panel.is-review-mode .top-band h2,
+  body[data-theme="viper"] .main-panel.is-review-mode .top-band h2 {
+    font-size: 0.95rem;
+  }
+
   .primary-button,
   .secondary-button,
   .reveal-button {
     width: 100%;
+  }
+
+  .quick-add-button {
+    width: 44px;
   }
 
   .review-card,
@@ -2418,6 +2586,12 @@ body[data-theme="viper"] textarea {
     min-height: 390px;
   }
 
+  .main-panel.is-review-mode .review-card,
+  body[data-theme="sekta"] .main-panel.is-review-mode .review-card,
+  body[data-theme="viper"] .main-panel.is-review-mode .review-card {
+    min-height: min(58dvh, 430px);
+  }
+
   body[data-theme="viper"] .review-card h3,
   body[data-theme="viper"] .trainer-card h3 {
     font-size: clamp(2.35rem, 13vw, 4rem);
@@ -2428,12 +2602,17 @@ body[data-theme="viper"] textarea {
   }
 
   .word-row {
-    grid-template-columns: 1fr 44px;
+    grid-template-columns: 1fr 88px;
   }
 
   .word-row > div:nth-child(2),
   .word-row > div:nth-child(3) {
     grid-column: 1 / -1;
+  }
+
+  .word-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
   }
 
 }

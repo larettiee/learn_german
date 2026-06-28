@@ -11,6 +11,7 @@ import {
   Flame,
   Import,
   Layers,
+  Pencil,
   Plus,
   Search,
   Settings,
@@ -753,7 +754,7 @@ export function App() {
     markStudiedToday();
   };
 
-  const updateCard = (id: string, patch: Partial<Pick<Card, "grammar" | "example" | "association">>) => {
+  const updateCard = (id: string, patch: Partial<Pick<Card, "russian" | "german" | "plural" | "grammar" | "example" | "association">>) => {
     setCards((current) => current.map((card) => (card.id === id ? { ...card, ...patch } : card)));
   };
 
@@ -868,7 +869,7 @@ export function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${tab === "review" ? "is-review-app" : ""}`}>
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-mark">{themeCopy.brandMark}</div>
@@ -896,7 +897,7 @@ export function App() {
         </div>
       </aside>
 
-      <main className="main-panel">
+      <main className={`main-panel ${tab === "review" ? "is-review-mode" : ""}`}>
         <Header
           due={dueCards.length}
           difficult={difficultCards}
@@ -920,7 +921,7 @@ export function App() {
           />
         )}
         {tab === "add" && <AddCardView themeCopy={themeCopy} onAdd={addCard} />}
-        {tab === "dictionary" && <DictionaryView themeCopy={themeCopy} cards={cards} onDelete={deleteCard} />}
+        {tab === "dictionary" && <DictionaryView themeCopy={themeCopy} cards={cards} onUpdate={updateCard} onDelete={deleteCard} />}
         {tab === "trainer" && (
           <TrainerView
             themeCopy={themeCopy}
@@ -1124,9 +1125,9 @@ function Header({
           В словаре {total} слов, проблемных сейчас {difficult}. Очередь пересчитывается после каждой самопроверки.
         </p>
       </div>
-      <button className="primary-button" onClick={onQuickAdd}>
+      <button className="primary-button quick-add-button" onClick={onQuickAdd} aria-label="Добавить слово">
         <Plus size={18} />
-        <span>Добавить слово</span>
+        <span className="quick-add-label">Добавить слово</span>
       </button>
     </section>
   );
@@ -1151,6 +1152,7 @@ function ReviewView({
   const [swipeStart, setSwipeStart] = useState<number | null>(null);
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [swipeFeedback, setSwipeFeedback] = useState<"known" | "again" | null>(null);
+  const didDrag = useRef(false);
   const [articleAnswer, setArticleAnswer] = useState<Article>("");
   const [associationDraft, setAssociationDraft] = useState("");
   const [exampleDraft, setExampleDraft] = useState("");
@@ -1168,6 +1170,7 @@ function ReviewView({
     setSwipeStart(null);
     setSwipeOffset(0);
     setSwipeFeedback(null);
+    didDrag.current = false;
     setArticleAnswer("");
     setAssociationDraft(card?.association ?? "");
     setExampleDraft(card?.example ?? "");
@@ -1209,6 +1212,7 @@ function ReviewView({
     setSwipeStart(event.clientX);
     setSwipeOffset(0);
     setSwipeFeedback(null);
+    didDrag.current = false;
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
@@ -1216,6 +1220,7 @@ function ReviewView({
     if (swipeStart === null) return;
     const nextOffset = event.clientX - swipeStart;
     const cappedOffset = Math.max(-170, Math.min(170, nextOffset));
+    if (Math.abs(cappedOffset) > 8) didDrag.current = true;
     setSwipeOffset(cappedOffset);
     if (cappedOffset > swipeThreshold * 0.55) setSwipeFeedback("known");
     else if (cappedOffset < -swipeThreshold * 0.55) setSwipeFeedback("again");
@@ -1244,6 +1249,10 @@ function ReviewView({
   };
 
   const flipCard = () => {
+    if (didDrag.current) {
+      didDrag.current = false;
+      return;
+    }
     if (Math.abs(swipeOffset) > 12) return;
     setRevealed((value) => !value);
   };
@@ -1744,9 +1753,53 @@ function AddCardView({ themeCopy, onAdd }: { themeCopy: (typeof LEARNING_THEMES)
   );
 }
 
-function DictionaryView({ themeCopy, cards, onDelete }: { themeCopy: (typeof LEARNING_THEMES)[Theme]; cards: Card[]; onDelete: (id: string) => void }) {
+function DictionaryView({
+  themeCopy,
+  cards,
+  onUpdate,
+  onDelete,
+}: {
+  themeCopy: (typeof LEARNING_THEMES)[Theme];
+  cards: Card[];
+  onUpdate: (id: string, patch: Partial<Pick<Card, "russian" | "german" | "plural" | "grammar" | "example" | "association">>) => void;
+  onDelete: (id: string) => void;
+}) {
   const [query, setQuery] = useState("");
+  const [editingId, setEditingId] = useState("");
+  const [draft, setDraft] = useState<Pick<Card, "russian" | "german" | "plural" | "grammar" | "example" | "association">>({
+    russian: "",
+    german: "",
+    plural: "",
+    grammar: "",
+    example: "",
+    association: "",
+  });
   const filtered = cards.filter((card) => `${card.russian} ${card.german} ${card.example}`.toLocaleLowerCase("ru").includes(query.toLocaleLowerCase("ru")));
+
+  const startEdit = (card: Card) => {
+    setEditingId(card.id);
+    setDraft({
+      russian: card.russian,
+      german: card.german,
+      plural: card.plural,
+      grammar: card.grammar,
+      example: card.example,
+      association: card.association ?? "",
+    });
+  };
+
+  const saveEdit = () => {
+    if (!editingId || !draft.russian.trim() || !draft.german.trim()) return;
+    onUpdate(editingId, {
+      russian: draft.russian.trim(),
+      german: draft.german.trim(),
+      plural: draft.plural.trim(),
+      grammar: draft.grammar.trim(),
+      example: draft.example.trim(),
+      association: draft.association?.trim() ?? "",
+    });
+    setEditingId("");
+  };
 
   return (
     <section className="dictionary-section">
@@ -1768,25 +1821,74 @@ function DictionaryView({ themeCopy, cards, onDelete }: { themeCopy: (typeof LEA
           <span>Следующий раз</span>
           <span></span>
         </div>
-        {filtered.map((card) => (
-          <div className="word-row" key={card.id}>
-            <div>
-              <strong><GermanTerm value={germanText(card)} /></strong>
-              <p>{card.russian}</p>
+        {filtered.map((card) => {
+          const isEditing = editingId === card.id;
+          return (
+            <div className={`word-row ${isEditing ? "is-editing" : ""}`} key={card.id}>
+              {isEditing ? (
+                <div className="dictionary-edit-form">
+                  <label>
+                    <span>Русский</span>
+                    <input value={draft.russian} onChange={(event) => setDraft({ ...draft, russian: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>{themeCopy.targetLabel}</span>
+                    <input value={draft.german} onChange={(event) => setDraft({ ...draft, german: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>{themeCopy.formLabel}</span>
+                    <input value={draft.plural} onChange={(event) => setDraft({ ...draft, plural: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>{themeCopy.formExtraLabel}</span>
+                    <input value={draft.grammar} onChange={(event) => setDraft({ ...draft, grammar: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>{themeCopy.exampleLabel}</span>
+                    <textarea value={draft.example} onChange={(event) => setDraft({ ...draft, example: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>Ассоциация</span>
+                    <textarea value={draft.association ?? ""} onChange={(event) => setDraft({ ...draft, association: event.target.value })} />
+                  </label>
+                  <div className="dictionary-edit-actions">
+                    <button className="primary-button" onClick={saveEdit} disabled={!draft.russian.trim() || !draft.german.trim()}>
+                      <Check size={18} />
+                      <span>Сохранить</span>
+                    </button>
+                    <button className="secondary-button" onClick={() => setEditingId("")}>
+                      <X size={18} />
+                      <span>Отменить</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <strong><GermanTerm value={germanText(card)} /></strong>
+                    <p>{card.russian}</p>
+                  </div>
+                  <div>
+                    <span className={`status ${strengthLabel(card)}`}>{strengthLabel(card)}</span>
+                    <p className="tabular">{card.correct}/{card.attempts} · {accuracy(card.correct, card.attempts)}%</p>
+                  </div>
+                  <div>
+                    <p className="next-review">{formatDate(card.nextReview)}</p>
+                    <p>{isDue(card) ? `сейчас · попыток ${card.attempts}` : `через ${formatInterval(card.intervalDays)} · попыток ${card.attempts}`}</p>
+                  </div>
+                  <div className="word-actions">
+                    <button className="icon-button" onClick={() => startEdit(card)} aria-label={`Редактировать ${card.german}`}>
+                      <Pencil size={18} />
+                    </button>
+                    <button className="icon-button" onClick={() => onDelete(card.id)} aria-label={`Удалить ${card.german}`}>
+                      <X size={18} />
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
-            <div>
-              <span className={`status ${strengthLabel(card)}`}>{strengthLabel(card)}</span>
-              <p className="tabular">{card.correct}/{card.attempts} · {accuracy(card.correct, card.attempts)}%</p>
-            </div>
-            <div>
-              <p className="next-review">{formatDate(card.nextReview)}</p>
-              <p>{isDue(card) ? `сейчас · попыток ${card.attempts}` : `через ${formatInterval(card.intervalDays)} · попыток ${card.attempts}`}</p>
-            </div>
-            <button className="icon-button" onClick={() => onDelete(card.id)} aria-label={`Удалить ${card.german}`}>
-              <X size={18} />
-            </button>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </section>
   );
