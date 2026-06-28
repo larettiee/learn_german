@@ -929,14 +929,127 @@ body[data-theme="viper"] .profile-mark {
   padding: 28px;
 }
 
+.flip-card {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+  perspective: 1400px;
+}
+
+.flip-inner {
+  position: relative;
+  min-height: 430px;
+  transform-style: preserve-3d;
+  transition-property: transform;
+  transition-duration: 360ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.flip-card.is-flipped .flip-inner {
+  transform: rotateY(180deg);
+}
+
+.card-face {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  min-height: 430px;
+  padding: 28px;
+  overflow: auto;
+  background: var(--panel-bg);
+  border-radius: 18px;
+  box-shadow: var(--shadow-border);
+  backface-visibility: hidden;
+}
+
+.card-back {
+  transform: rotateY(180deg);
+}
+
+.swipe-card {
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+  transition-property: transform, background-color, box-shadow;
+  transition-duration: 160ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+  will-change: transform;
+}
+
+.swipe-card.is-dragging {
+  cursor: grabbing;
+  transition-duration: 0ms;
+}
+
+.swipe-card.swipe-known {
+  box-shadow:
+    0 0 0 2px rgba(68, 151, 112, 0.24),
+    0 24px 64px -34px rgba(31, 102, 77, 0.72);
+}
+
+.swipe-card.swipe-known .card-face {
+  background:
+    linear-gradient(135deg, rgba(68, 151, 112, 0.22), transparent 42%),
+    var(--panel-bg);
+  box-shadow:
+    0 0 0 2px rgba(68, 151, 112, 0.24),
+    0 24px 64px -34px rgba(31, 102, 77, 0.72);
+}
+
+.swipe-card.swipe-again {
+  box-shadow:
+    0 0 0 2px rgba(216, 75, 56, 0.24),
+    0 24px 64px -34px rgba(143, 45, 34, 0.72);
+}
+
+.swipe-card.swipe-again .card-face {
+  background:
+    linear-gradient(225deg, rgba(216, 75, 56, 0.22), transparent 42%),
+    var(--panel-bg);
+  box-shadow:
+    0 0 0 2px rgba(216, 75, 56, 0.24),
+    0 24px 64px -34px rgba(143, 45, 34, 0.72);
+}
+
+.swipe-feedback {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  min-height: 40px;
+  padding: 8px 12px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface-2) 86%, transparent);
+  border-radius: 999px;
+  box-shadow: var(--shadow-border);
+  font-weight: 850;
+  transition-property: color, background-color, transform;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.swipe-known .swipe-feedback {
+  color: #1f664d;
+  background: #e3f4ec;
+  transform: translateX(6px);
+}
+
+.swipe-again .swipe-feedback {
+  color: #8f2d22;
+  background: #fdebe6;
+  transform: translateX(-6px);
+}
+
 body[data-theme="sekta"] .review-card,
 body[data-theme="sekta"] .trainer-card {
   position: relative;
-  overflow: hidden;
   min-height: 430px;
 }
 
-body[data-theme="sekta"] .review-card::before,
+body[data-theme="sekta"] .review-card:not(.flip-card)::before,
+body[data-theme="sekta"] .review-card .card-face::before,
 body[data-theme="sekta"] .trainer-card::before {
   content: "";
   position: absolute;
@@ -950,7 +1063,8 @@ body[data-theme="sekta"] .trainer-card::before {
   animation: glass-rain 12s linear infinite;
 }
 
-body[data-theme="sekta"] .review-card > *,
+body[data-theme="sekta"] .review-card:not(.flip-card) > *,
+body[data-theme="sekta"] .review-card .card-face > *,
 body[data-theme="sekta"] .trainer-card > * {
   position: relative;
   z-index: 1;
@@ -959,11 +1073,11 @@ body[data-theme="sekta"] .trainer-card > * {
 body[data-theme="viper"] .review-card,
 body[data-theme="viper"] .trainer-card {
   position: relative;
-  overflow: hidden;
   min-height: 430px;
 }
 
-body[data-theme="viper"] .review-card::before,
+body[data-theme="viper"] .review-card:not(.flip-card)::before,
+body[data-theme="viper"] .review-card .card-face::before,
 body[data-theme="viper"] .trainer-card::before {
   content: "";
   position: absolute;
@@ -977,7 +1091,8 @@ body[data-theme="viper"] .trainer-card::before {
   animation: viper-glitter 10s linear infinite;
 }
 
-body[data-theme="viper"] .review-card > *,
+body[data-theme="viper"] .review-card:not(.flip-card) > *,
+body[data-theme="viper"] .review-card .card-face > *,
 body[data-theme="viper"] .trainer-card > * {
   position: relative;
   z-index: 1;
@@ -1049,12 +1164,72 @@ body[data-theme="viper"] .trainer-card h3 {
 .answer-panel {
   display: grid;
   gap: 6px;
-  max-width: 560px;
+  max-width: 720px;
   padding: 16px;
   color: var(--muted);
   background: var(--surface-2);
   border-radius: 12px;
   animation: lift-in 260ms cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+
+.article-check,
+.leech-panel {
+  display: grid;
+  gap: 12px;
+  max-width: 720px;
+  padding: 16px;
+  background: color-mix(in srgb, var(--surface-2) 82%, transparent);
+  border-radius: 14px;
+  box-shadow: var(--shadow-border);
+}
+
+.article-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.article-choice {
+  min-height: 44px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--ink);
+  background: var(--panel-bg);
+  box-shadow: var(--shadow-border);
+  font-size: 1rem;
+  font-weight: 900;
+  transition-property: transform, background-color, color, box-shadow;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.article-choice:active {
+  transform: scale(0.96);
+}
+
+.article-choice.is-selected {
+  box-shadow: var(--shadow-border-hover);
+}
+
+.article-choice.is-correct {
+  color: #1f664d;
+  background: #e3f4ec;
+}
+
+.article-result {
+  font-weight: 850;
+}
+
+.article-result.ok {
+  color: #1f664d;
+}
+
+.article-result.diff {
+  color: #8f2d22;
+}
+
+.leech-panel textarea {
+  min-height: 96px;
 }
 
 .match-indicator,
@@ -1151,7 +1326,7 @@ body[data-theme="viper"] .word-row::before {
 
 .grade-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1327,7 +1502,8 @@ textarea:focus {
 }
 
 .status.новое,
-.status.учится {
+.status.учится,
+.status.закрепление {
   color: #806015;
   background: #fff4cf;
 }

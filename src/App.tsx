@@ -12,7 +12,6 @@ import {
   Import,
   Layers,
   Plus,
-  RotateCcw,
   Search,
   Settings,
   Sparkles,
@@ -35,6 +34,7 @@ type Card = {
   plural: string;
   grammar: string;
   example: string;
+  association?: string;
   createdAt: string;
   nextReview: string;
   intervalDays: number;
@@ -98,6 +98,7 @@ const STREAK_KEY = "deutsch-trainer.streak.v1";
 const READER_KEY = "deutsch-trainer.reader.v1";
 const READER_BOOKS_KEY = "deutsch-trainer.readerBooks.v1";
 const REVIEW_INTERVALS = [1 / 24, 3 / 24, 12 / 24, 1, 3, 7, 14, 30];
+const LEARNING_PHASE_STEPS = 4;
 const TRAINER_BATCH_SIZE = 10;
 const TRAINER_MASTERY_STREAK = 3;
 
@@ -291,6 +292,7 @@ function strengthLabel(card: Card) {
   const score = accuracy(card.correct, card.attempts);
   if (!card.attempts) return "новое";
   if (card.wrong >= 3 && score < 65) return "проблемное";
+  if (completedReviewStep(card) <= LEARNING_PHASE_STEPS) return "закрепление";
   if (score >= 90 && card.intervalDays >= 14) return "выучено";
   if (score >= 75) return "знакомое";
   return "учится";
@@ -751,6 +753,10 @@ export function App() {
     markStudiedToday();
   };
 
+  const updateCard = (id: string, patch: Partial<Pick<Card, "grammar" | "example" | "association">>) => {
+    setCards((current) => current.map((card) => (card.id === id ? { ...card, ...patch } : card)));
+  };
+
   const deleteCard = (id: string) => {
     setCards((current) => current.filter((card) => card.id !== id));
   };
@@ -899,7 +905,7 @@ export function App() {
           onQuickAdd={() => setTab("add")}
         />
 
-        {tab === "review" && <ReviewView themeCopy={themeCopy} cards={dueCards} allCards={cards} onReview={reviewCard} onAdd={() => setTab("add")} />}
+        {tab === "review" && <ReviewView themeCopy={themeCopy} cards={dueCards} allCards={cards} onReview={reviewCard} onUpdateCard={updateCard} onAdd={() => setTab("add")} />}
         {tab === "reader" && (
           <ReaderView
             theme={theme}
@@ -1131,16 +1137,41 @@ function ReviewView({
   cards,
   allCards,
   onReview,
+  onUpdateCard,
   onAdd,
 }: {
   themeCopy: (typeof LEARNING_THEMES)[Theme];
   cards: Card[];
   allCards: Card[];
   onReview: (id: string, grade: ReviewGrade) => void;
+  onUpdateCard: (id: string, patch: Partial<Pick<Card, "grammar" | "example" | "association">>) => void;
   onAdd: () => void;
 }) {
   const [revealed, setRevealed] = useState(false);
+  const [swipeStart, setSwipeStart] = useState<number | null>(null);
+  const [swipeOffset, setSwipeOffset] = useState(0);
+  const [swipeFeedback, setSwipeFeedback] = useState<"known" | "again" | null>(null);
+  const [articleAnswer, setArticleAnswer] = useState<Article>("");
+  const [associationDraft, setAssociationDraft] = useState("");
+  const [exampleDraft, setExampleDraft] = useState("");
   const card = cards[0];
+  const swipeThreshold = 92;
+  const nextKnownInterval = card ? REVIEW_INTERVALS[Math.min(completedReviewStep(card), REVIEW_INTERVALS.length - 1)] : REVIEW_INTERVALS[0];
+  const expectedArticle = card ? leadingArticle(germanText(card)) : "";
+  const targetWithoutArticle = card ? germanText(card).replace(/^(der|die|das)\b/i, "").trimStart() : "";
+  const needsArticleCheck = Boolean(card && expectedArticle && completedReviewStep(card) > LEARNING_PHASE_STEPS);
+  const articlePassed = !needsArticleCheck || articleAnswer === expectedArticle;
+  const isProblemCard = card ? strengthLabel(card) === "проблемное" : false;
+
+  useEffect(() => {
+    setRevealed(false);
+    setSwipeStart(null);
+    setSwipeOffset(0);
+    setSwipeFeedback(null);
+    setArticleAnswer("");
+    setAssociationDraft(card?.association ?? "");
+    setExampleDraft(card?.example ?? "");
+  }, [card?.id]);
 
   if (!card) {
     return (
@@ -1157,53 +1188,181 @@ function ReviewView({
   }
 
   const submitGrade = (grade: ReviewGrade) => {
+    if (grade !== "again" && !articlePassed) {
+      setRevealed(true);
+      return;
+    }
     onReview(card.id, grade);
     setRevealed(false);
+    setSwipeStart(null);
+    setSwipeOffset(0);
+    setSwipeFeedback(null);
+    setArticleAnswer("");
+  };
+
+  const submitSwipe = (grade: ReviewGrade, feedback: "known" | "again") => {
+    setSwipeFeedback(feedback);
+    window.setTimeout(() => submitGrade(grade), 140);
+  };
+
+  const beginSwipe = (event: React.PointerEvent<HTMLDivElement>) => {
+    setSwipeStart(event.clientX);
+    setSwipeOffset(0);
+    setSwipeFeedback(null);
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const moveSwipe = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (swipeStart === null) return;
+    const nextOffset = event.clientX - swipeStart;
+    const cappedOffset = Math.max(-170, Math.min(170, nextOffset));
+    setSwipeOffset(cappedOffset);
+    if (cappedOffset > swipeThreshold * 0.55) setSwipeFeedback("known");
+    else if (cappedOffset < -swipeThreshold * 0.55) setSwipeFeedback("again");
+    else setSwipeFeedback(null);
+  };
+
+  const endSwipe = () => {
+    if (swipeOffset > swipeThreshold) {
+      if (!articlePassed) {
+        setRevealed(true);
+        setSwipeStart(null);
+        setSwipeOffset(0);
+        setSwipeFeedback(null);
+        return;
+      }
+      submitSwipe("good", "known");
+      return;
+    }
+    if (swipeOffset < -swipeThreshold) {
+      submitSwipe("again", "again");
+      return;
+    }
+    setSwipeStart(null);
+    setSwipeOffset(0);
+    setSwipeFeedback(null);
+  };
+
+  const flipCard = () => {
+    if (Math.abs(swipeOffset) > 12) return;
+    setRevealed((value) => !value);
+  };
+
+  const saveProblemHelp = () => {
+    onUpdateCard(card.id, {
+      association: associationDraft.trim(),
+      example: exampleDraft.trim(),
+    });
   };
 
   return (
     <section className="review-layout">
-      <div className="review-card">
-        <div className="card-meta">
-          <span>{strengthLabel(card)}</span>
-          <span className="tabular">{accuracy(card.correct, card.attempts)}%</span>
-        </div>
-        <p className="prompt-label">{themeCopy.reviewPrompt}</p>
-        <h3>{card.russian}</h3>
-        {card.example && <p className="context-line">{card.example}</p>}
-
-        <button className="reveal-button" onClick={() => setRevealed((value) => !value)}>
-          <span>{revealed ? "Скрыть ответ" : "Показать ответ"}</span>
-          <ChevronDown className={revealed ? "is-open" : ""} size={18} />
-        </button>
-
-        {revealed && (
-          <div className="answer-panel">
-            <p className="answer-word">
-              <GermanTerm value={germanText(card)} />
-            </p>
-            {card.plural && <p>Plural: {card.plural}</p>}
-            {card.grammar && <p>{card.grammar}</p>}
+      <div
+        className={`review-card swipe-card flip-card ${revealed ? "is-flipped" : ""} ${swipeStart !== null ? "is-dragging" : ""} ${swipeFeedback ? `swipe-${swipeFeedback}` : ""}`}
+        onPointerDown={beginSwipe}
+        onPointerMove={moveSwipe}
+        onPointerUp={endSwipe}
+        onPointerCancel={endSwipe}
+        onClick={flipCard}
+        style={{
+          transform: `translateX(${swipeOffset}px) rotate(${swipeOffset / 28}deg)`,
+        }}
+      >
+        <div className="flip-inner">
+          <div className="card-face card-front">
+            <div className="swipe-feedback">
+              {swipeFeedback === "known" ? (
+                <>
+                  <Check size={18} />
+                  <span>Знаю · через {formatInterval(nextKnownInterval)}</span>
+                </>
+              ) : swipeFeedback === "again" ? (
+                <>
+                  <X size={18} />
+                  <span>Не знаю · через {formatInterval(REVIEW_INTERVALS[0])}</span>
+                </>
+              ) : (
+                <span>{needsArticleCheck ? "Нажми и проверь артикль" : "Нажми, чтобы перевернуть"}</span>
+              )}
+            </div>
+            <div className="card-meta">
+              <span>{strengthLabel(card)}</span>
+              <span className="tabular">{accuracy(card.correct, card.attempts)}%</span>
+            </div>
+            <p className="prompt-label">{themeCopy.reviewPrompt}</p>
+            <h3>{card.russian}</h3>
           </div>
-        )}
+
+          <div className="card-face card-back">
+            <div className="card-meta">
+              <span>{needsArticleCheck ? "строгая проверка" : "ответ"}</span>
+              <span className="tabular">{accuracy(card.correct, card.attempts)}%</span>
+            </div>
+            <div className="answer-panel">
+              <p className="answer-word">
+                <GermanTerm value={germanText(card)} />
+              </p>
+              <p>{card.russian}</p>
+              {card.plural && <p>Plural: {card.plural}</p>}
+              {card.grammar && <p>{card.grammar}</p>}
+              {card.example && <p className="context-line">{card.example}</p>}
+              {card.association && <p className="context-line">Ассоциация: {card.association}</p>}
+            </div>
+
+            {needsArticleCheck && (
+              <div className="article-check" onClick={(event) => event.stopPropagation()}>
+                <p className="prompt-label">Артикль для {targetWithoutArticle}</p>
+                <div className="article-options">
+                  {(["der", "die", "das"] as Article[]).map((article) => (
+                    <button
+                      className={`article-choice ${articleAnswer === article ? "is-selected" : ""} ${articleAnswer && expectedArticle === article ? "is-correct" : ""}`}
+                      key={article}
+                      onClick={() => setArticleAnswer(article)}
+                    >
+                      {article}
+                    </button>
+                  ))}
+                </div>
+                {articleAnswer && (
+                  <p className={`article-result ${articlePassed ? "ok" : "diff"}`}>
+                    {articlePassed ? "Верно, можно свайпать вправо" : `Нужен артикль ${expectedArticle}`}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {isProblemCard && (
+              <div className="leech-panel" onClick={(event) => event.stopPropagation()}>
+                <div>
+                  <p className="eyebrow">спасти слово</p>
+                  <h4>Добавь крючок для памяти</h4>
+                </div>
+                <label>
+                  <span>Ассоциация</span>
+                  <input value={associationDraft} onChange={(event) => setAssociationDraft(event.target.value)} placeholder="например: звучит как..." />
+                </label>
+                <label>
+                  <span>Свой пример</span>
+                  <textarea value={exampleDraft} onChange={(event) => setExampleDraft(event.target.value)} placeholder="короткое личное предложение" />
+                </label>
+                <button className="secondary-button" onClick={saveProblemHelp}>
+                  <Check size={18} />
+                  <span>Сохранить подсказку</span>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="grade-grid">
         <button className="grade-button again" onClick={() => submitGrade("again")}>
           <X size={18} />
-          <span>Не помню</span>
+          <span>Не знаю</span>
         </button>
-        <button className="grade-button hard" onClick={() => submitGrade("hard")}>
-          <RotateCcw size={18} />
-          <span>Трудно</span>
-        </button>
-        <button className="grade-button good" onClick={() => submitGrade("good")}>
+        <button className="grade-button good" onClick={() => submitGrade("good")} disabled={!articlePassed}>
           <Check size={18} />
-          <span>Помню</span>
-        </button>
-        <button className="grade-button easy" onClick={() => submitGrade("easy")}>
-          <ArrowRight size={18} />
-          <span>Легко</span>
+          <span>Знаю</span>
         </button>
       </div>
     </section>
