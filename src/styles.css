@@ -1454,9 +1454,22 @@ textarea:focus {
   color: var(--red);
 }
 
+.book-item.is-complete strong {
+  padding: 5px 8px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--gold) 28%, var(--surface-2));
+  border-radius: 999px;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
 .book-item.is-active {
   background: color-mix(in srgb, var(--red) 12%, var(--surface-2));
   box-shadow: var(--shadow-border-hover);
+}
+
+.book-item.is-complete {
+  background: color-mix(in srgb, var(--gold) 12%, var(--surface-2));
 }
 
 .book-item:active {

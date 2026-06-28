@@ -72,6 +72,7 @@ type ReaderBook = {
   title: string;
   text: string;
   position: number;
+  completedAt?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -96,7 +97,7 @@ const TRAINER_KEY = "deutsch-trainer.trainer.v1";
 const STREAK_KEY = "deutsch-trainer.streak.v1";
 const READER_KEY = "deutsch-trainer.reader.v1";
 const READER_BOOKS_KEY = "deutsch-trainer.readerBooks.v1";
-const REVIEW_INTERVALS = [1, 3, 7, 14, 30];
+const REVIEW_INTERVALS = [1 / 24, 3 / 24, 12 / 24, 1, 3, 7, 14, 30];
 const TRAINER_BATCH_SIZE = 10;
 const TRAINER_MASTERY_STREAK = 3;
 
@@ -246,15 +247,15 @@ function normalizeAnswer(value: string) {
     .replace(/\s+/g, " ");
 }
 
-function addDaysIso(days: number) {
-  const date = startOfDay(new Date());
-  date.setDate(date.getDate() + days);
+function addIntervalIso(days: number) {
+  const date = new Date();
+  date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
   return date.toISOString();
 }
 
-function addDaysFromIso(iso: string | undefined, days: number) {
-  const date = iso ? startOfDay(new Date(iso)) : startOfDay(new Date());
-  date.setDate(date.getDate() + days);
+function addIntervalFromIso(iso: string | undefined, days: number) {
+  const date = iso ? new Date(iso) : new Date();
+  date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
   return date.toISOString();
 }
 
@@ -262,15 +263,23 @@ function formatDate(iso: string) {
   return new Intl.DateTimeFormat("ru", {
     day: "2-digit",
     month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
   }).format(new Date(iso));
 }
 
+function formatInterval(days: number) {
+  const hours = Math.round(days * 24);
+  if (hours < 24) return `${hours} ч.`;
+  return `${Math.round(days)} дн.`;
+}
+
 function isDue(card: Card) {
-  return startOfDay(new Date(card.nextReview)).getTime() <= startOfDay(new Date()).getTime();
+  return new Date(card.nextReview).getTime() <= Date.now();
 }
 
 function isTrainerDue(item: TrainerItem) {
-  return startOfDay(new Date(item.nextReview ?? today())).getTime() <= startOfDay(new Date()).getTime();
+  return new Date(item.nextReview ?? today()).getTime() <= Date.now();
 }
 
 function accuracy(correct: number, attempts: number) {
@@ -305,6 +314,9 @@ function intervalForCompletedStep(step: number) {
 }
 
 function normalizeCardSchedule(card: Card): Card {
+  if (!card.attempts) {
+    return { ...card, intervalDays: REVIEW_INTERVALS[0] };
+  }
   const step = completedReviewStep(card);
   const expectedInterval = intervalForCompletedStep(step);
   if (card.intervalDays === expectedInterval) return card;
@@ -312,11 +324,14 @@ function normalizeCardSchedule(card: Card): Card {
   return {
     ...card,
     intervalDays: expectedInterval,
-    nextReview: addDaysFromIso(card.lastReviewedAt ?? card.createdAt, expectedInterval),
+    nextReview: addIntervalFromIso(card.lastReviewedAt ?? card.createdAt, expectedInterval),
   };
 }
 
 function normalizeTrainerSchedule(item: TrainerItem): TrainerItem {
+  if (!item.attempts) {
+    return { ...item, intervalDays: REVIEW_INTERVALS[0] };
+  }
   const step = completedTrainerStep(item);
   const expectedInterval = intervalForCompletedStep(step);
   if ((item.intervalDays ?? 1) === expectedInterval) return item;
@@ -324,7 +339,7 @@ function normalizeTrainerSchedule(item: TrainerItem): TrainerItem {
   return {
     ...item,
     intervalDays: expectedInterval,
-    nextReview: addDaysFromIso(item.lastAnsweredAt ?? item.createdAt, expectedInterval),
+    nextReview: addIntervalFromIso(item.lastAnsweredAt ?? item.createdAt, expectedInterval),
   };
 }
 
@@ -389,6 +404,7 @@ function clampBookPosition(book: ReaderBook) {
 }
 
 function readingProgress(book: ReaderBook) {
+  if (book.completedAt) return 100;
   if (!book.text.trim()) return 0;
   return Math.min(100, Math.round((clampBookPosition(book) / book.text.length) * 100));
 }
@@ -446,7 +462,7 @@ function updateCardAfterReview(card: Card, grade: ReviewGrade): Card {
 
   return {
     ...card,
-    nextReview: addDaysIso(nextInterval),
+    nextReview: addIntervalIso(nextInterval),
     intervalDays: nextInterval,
     reviewStep: nextStep,
     attempts: card.attempts + 1,
@@ -466,7 +482,7 @@ function updateTrainerAfterAnswer(item: TrainerItem, correct: boolean): TrainerI
 
   return {
     ...item,
-    nextReview: isMasteredForToday ? addDaysIso(nextInterval) : today(),
+    nextReview: isMasteredForToday ? addIntervalIso(nextInterval) : today(),
     intervalDays: nextInterval,
     reviewStep: nextStep,
     attempts: item.attempts + 1,
@@ -719,7 +735,7 @@ export function App() {
       id: uid(),
       createdAt: new Date().toISOString(),
       nextReview: today(),
-      intervalDays: 1,
+      intervalDays: REVIEW_INTERVALS[0],
       reviewStep: 0,
       attempts: 0,
       correct: 0,
@@ -747,7 +763,7 @@ export function App() {
       correct: 0,
       wrong: 0,
       nextReview: today(),
-      intervalDays: 1,
+      intervalDays: REVIEW_INTERVALS[0],
       reviewStep: 0,
       streak: 0,
       createdAt: new Date().toISOString(),
@@ -782,7 +798,7 @@ export function App() {
     setActiveBookId(book.id);
   };
 
-  const updateReaderBook = (id: string, patch: Partial<Pick<ReaderBook, "title" | "text" | "position">>) => {
+  const updateReaderBook = (id: string, patch: Partial<Pick<ReaderBook, "title" | "text" | "position" | "completedAt">>) => {
     setReaderBooks((current) =>
       current.map((book) =>
         book.id === id
@@ -1211,7 +1227,7 @@ function ReaderView({
   activeBookId: string;
   onSelectBook: (id: string) => void;
   onCreateBook: (text: string, title?: string) => void;
-  onUpdateBook: (id: string, patch: Partial<Pick<ReaderBook, "title" | "text" | "position">>) => void;
+  onUpdateBook: (id: string, patch: Partial<Pick<ReaderBook, "title" | "text" | "position" | "completedAt">>) => void;
   onDeleteBook: (id: string) => void;
   onAdd: (card: NewCardInput) => void;
 }) {
@@ -1316,6 +1332,14 @@ function ReaderView({
     setSaved("Место сохранено");
   };
 
+  const toggleBookCompleted = () => {
+    if (!activeBook) return;
+    onUpdateBook(activeBook.id, {
+      completedAt: activeBook.completedAt ? undefined : new Date().toISOString(),
+      position: activeBook.completedAt ? activeBook.position : Math.max(activeBook.text.length - 1, 0),
+    });
+  };
+
   const jumpToSaved = () => {
     if (!activeBook) return;
     const savedPosition = clampBookPosition(activeBook);
@@ -1378,9 +1402,9 @@ function ReaderView({
 
           <div className="book-list">
             {books.map((book) => (
-              <button className={`book-item ${book.id === activeBook?.id ? "is-active" : ""}`} key={book.id} onClick={() => onSelectBook(book.id)}>
+              <button className={`book-item ${book.id === activeBook?.id ? "is-active" : ""} ${book.completedAt ? "is-complete" : ""}`} key={book.id} onClick={() => onSelectBook(book.id)}>
                 <span>{book.title}</span>
-                <strong className="tabular">{readingProgress(book)}%</strong>
+                <strong className="tabular">{book.completedAt ? "завершена" : `${readingProgress(book)}%`}</strong>
               </button>
             ))}
           </div>
@@ -1440,6 +1464,10 @@ function ReaderView({
               <button className="secondary-button" onClick={savePlace}>
                 <Check size={18} />
                 <span>Закончила здесь</span>
+              </button>
+              <button className="secondary-button" onClick={toggleBookCompleted}>
+                <Sparkles size={18} />
+                <span>{activeBook.completedAt ? "Вернуть в чтение" : "Завершить"}</span>
               </button>
               <button className="danger-button" onClick={() => window.confirm("Удалить эту мини-книжку?") && onDeleteBook(activeBook.id)}>
                 <X size={18} />
@@ -1571,7 +1599,7 @@ function DictionaryView({ themeCopy, cards, onDelete }: { themeCopy: (typeof LEA
             </div>
             <div>
               <p className="next-review">{formatDate(card.nextReview)}</p>
-              <p>{isDue(card) ? `сегодня · попыток ${card.attempts}` : `через ${card.intervalDays} дн. · попыток ${card.attempts}`}</p>
+              <p>{isDue(card) ? `сейчас · попыток ${card.attempts}` : `через ${formatInterval(card.intervalDays)} · попыток ${card.attempts}`}</p>
             </div>
             <button className="icon-button" onClick={() => onDelete(card.id)} aria-label={`Удалить ${card.german}`}>
               <X size={18} />
