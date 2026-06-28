@@ -1299,14 +1299,36 @@ function ReviewView({
               <span className="tabular">{accuracy(card.correct, card.attempts)}%</span>
             </div>
             <div className="answer-panel">
-              <p className="answer-word">
+              <p className="answer-word answer-hero">
                 <GermanTerm value={germanText(card)} />
               </p>
-              <p>{card.russian}</p>
-              {card.plural && <p>Plural: {card.plural}</p>}
-              {card.grammar && <p>{card.grammar}</p>}
-              {card.example && <p className="context-line">{card.example}</p>}
-              {card.association && <p className="context-line">Ассоциация: {card.association}</p>}
+              <p className="answer-translation">{card.russian}</p>
+              <div className="answer-details">
+                {card.plural && (
+                  <div>
+                    <span>Plural</span>
+                    <strong>{card.plural}</strong>
+                  </div>
+                )}
+                {card.grammar && (
+                  <div>
+                    <span>Грамматика</span>
+                    <strong>{card.grammar}</strong>
+                  </div>
+                )}
+                {card.example && (
+                  <div>
+                    <span>Пример</span>
+                    <strong>{card.example}</strong>
+                  </div>
+                )}
+                {card.association && (
+                  <div>
+                    <span>Ассоциация</span>
+                    <strong>{card.association}</strong>
+                  </div>
+                )}
+              </div>
             </div>
 
             {needsArticleCheck && (
