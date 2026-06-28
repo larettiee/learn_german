@@ -933,22 +933,12 @@ body[data-theme="viper"] .profile-mark {
   padding: 0;
   background: transparent;
   box-shadow: none;
-  perspective: 1400px;
 }
 
 .flip-inner {
   position: relative;
   min-height: 430px;
   isolation: isolate;
-  transform-style: preserve-3d;
-  -webkit-transform-style: preserve-3d;
-  transition-property: transform;
-  transition-duration: 360ms;
-  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
-}
-
-.flip-card.is-flipped .flip-inner {
-  transform: rotateY(180deg);
 }
 
 .card-face {
@@ -965,21 +955,17 @@ body[data-theme="viper"] .profile-mark {
   box-shadow: var(--shadow-border);
   opacity: 1;
   pointer-events: auto;
-  transform-style: preserve-3d;
-  -webkit-transform-style: preserve-3d;
-  backface-visibility: hidden;
-  -webkit-backface-visibility: hidden;
-  transition-property: opacity, visibility;
-  transition-duration: 120ms;
+  transition-property: opacity, transform, visibility;
+  transition-duration: 180ms;
   transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
 }
 
 .card-front {
-  transform: rotateY(0deg) translateZ(1px);
+  transform: translateY(0) scale(1);
 }
 
 .card-back {
-  transform: rotateY(180deg) translateZ(1px);
+  transform: translateY(8px) scale(0.985);
 }
 
 .flip-card:not(.is-flipped) .card-back,
@@ -987,6 +973,14 @@ body[data-theme="viper"] .profile-mark {
   visibility: hidden;
   opacity: 0;
   pointer-events: none;
+}
+
+.flip-card.is-flipped .card-back {
+  transform: translateY(0) scale(1);
+}
+
+.flip-card.is-flipped .card-front {
+  transform: translateY(-8px) scale(0.985);
 }
 
 .swipe-card {
