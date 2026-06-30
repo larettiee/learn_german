@@ -1385,6 +1385,7 @@ function ReviewView({
   };
 
   const beginSwipe = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
     setSwipeStart(event.clientX);
     setSwipeOffset(0);
     setSwipeFeedback(null);
@@ -1394,6 +1395,7 @@ function ReviewView({
 
   const moveSwipe = (event: React.PointerEvent<HTMLDivElement>) => {
     if (swipeStart === null) return;
+    event.preventDefault();
     const nextOffset = event.clientX - swipeStart;
     const cappedOffset = Math.max(-170, Math.min(170, nextOffset));
     if (Math.abs(cappedOffset) > 8) didDrag.current = true;
@@ -1786,7 +1788,7 @@ function ReaderView({
                 <p className="eyebrow">{lookupStatus === "loading" ? "ищу подсказку" : "карточка из текста"}</p>
                 <h4>{selected.word}</h4>
               </div>
-              <button className="icon-button" onClick={() => setSelected(null)} aria-label="Закрыть карточку">
+              <button className="icon-button lookup-close-button" onClick={() => setSelected(null)} aria-label="Закрыть карточку">
                 <X size={18} />
               </button>
             </div>
