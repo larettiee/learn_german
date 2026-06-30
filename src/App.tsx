@@ -24,6 +24,7 @@ import { isSupabaseConfigured, supabase } from "./supabase";
 
 type Tab = "review" | "reader" | "add" | "dictionary" | "trainer" | "settings";
 type Theme = "sekta" | "viper";
+type StudyLanguage = "german" | "english";
 type Article = "" | "der" | "die" | "das";
 type ReviewGrade = "again" | "hard" | "good" | "easy";
 
@@ -83,12 +84,19 @@ type StreakState = {
   lastStudyDate: string;
 };
 
+type UserProfile = {
+  language: StudyLanguage;
+  theme: Theme;
+  onboarded: boolean;
+};
+
 type CloudState = {
   cards: Card[];
   trainerItems: TrainerItem[];
   streak: StreakState;
   readerText?: string;
   readerBooks?: ReaderBook[];
+  profile?: UserProfile;
 };
 
 type SyncStatus = "local" | "loading" | "synced" | "saving" | "error";
@@ -98,6 +106,7 @@ const TRAINER_KEY = "deutsch-trainer.trainer.v1";
 const STREAK_KEY = "deutsch-trainer.streak.v1";
 const READER_KEY = "deutsch-trainer.reader.v1";
 const READER_BOOKS_KEY = "deutsch-trainer.readerBooks.v1";
+const PROFILE_KEY = "deutsch-trainer.profile.v1";
 const REVIEW_INTERVALS = [1 / 24, 3 / 24, 12 / 24, 1, 3, 7, 14, 30];
 const LEARNING_PHASE_STEPS = 4;
 const TRAINER_BATCH_SIZE = 10;
@@ -105,8 +114,8 @@ const TRAINER_MASTERY_STREAK = 3;
 const READER_PAGE_CHARS = 1600;
 const DICTIONARY_PAGE_SIZE = 80;
 
-const LEARNING_THEMES: Record<
-  Theme,
+const LANGUAGE_COPY: Record<
+  StudyLanguage,
   {
     brandMark: string;
     eyebrow: string;
@@ -137,7 +146,7 @@ const LEARNING_THEMES: Record<
     trainerHiddenHint: string;
   }
 > = {
-  sekta: {
+  german: {
     brandMark: "D",
     eyebrow: "немецкий · london rain",
     title: "London Rain",
@@ -169,7 +178,7 @@ const LEARNING_THEMES: Record<
     trainerAnswerPlaceholder: "Deine Antwort...",
     trainerHiddenHint: "Сначала напиши вариант, потом сравним его с сохраненным немецким предложением.",
   },
-  viper: {
+  english: {
     brandMark: "V",
     eyebrow: "viperr english · b1 / b2 / c1",
     title: "VIPERR",
@@ -203,15 +212,28 @@ const LEARNING_THEMES: Record<
   },
 };
 
+type LearningCopy = (typeof LANGUAGE_COPY)[StudyLanguage];
+
+const THEME_OPTIONS: Record<Theme, { label: string; hint: string; mark: string }> = {
+  sekta: { label: "London Rain", hint: "дождь, стекло, спокойный тёмный Лондон", mark: "L" },
+  viper: { label: "Viper", hint: "леопард, Y2K, розовый глянец", mark: "V" },
+};
+
+const LANGUAGE_OPTIONS: Record<StudyLanguage, { label: string; hint: string }> = {
+  german: { label: "Немецкий", hint: "артикли, примеры и немецкие подсказки" },
+  english: { label: "Английский", hint: "B1-C1, английские фразы и тексты" },
+};
+
+const DEFAULT_PROFILE: UserProfile = {
+  language: "german",
+  theme: "sekta",
+  onboarded: false,
+};
+
 const AUTH_BRAND = {
   brandMark: "L",
   eyebrow: "personal language trainer",
   title: "Language Trainer",
-};
-
-const USER_THEMES: Record<string, Theme> = {
-  "tushinavaleria@yandex.ru": "sekta",
-  "tseb1so@vk.com": "viper",
 };
 
 const today = () => startOfDay(new Date()).toISOString();
@@ -239,8 +261,14 @@ function writeStorage<T>(key: string, value: T) {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
-function themeForEmail(email?: string | null): Theme {
-  return USER_THEMES[email?.trim().toLocaleLowerCase("ru") ?? ""] ?? "sekta";
+function normalizeProfile(profile?: Partial<UserProfile>): UserProfile {
+  const language = profile?.language === "english" ? "english" : "german";
+  const theme = profile?.theme === "viper" ? "viper" : "sekta";
+  return {
+    language,
+    theme,
+    onboarded: Boolean(profile?.onboarded),
+  };
 }
 
 function normalizeAnswer(value: string) {
@@ -578,6 +606,7 @@ export function App() {
   const [streak, setStreak] = usePersistentState<StreakState>(STREAK_KEY, { count: 0, lastStudyDate: "" });
   const [readerText, setReaderText] = usePersistentState(READER_KEY, "");
   const [readerBooks, setReaderBooks] = usePersistentState<ReaderBook[]>(READER_BOOKS_KEY, []);
+  const [profile, setProfile] = usePersistentState<UserProfile>(PROFILE_KEY, DEFAULT_PROFILE);
   const [activeBookId, setActiveBookId] = useState("");
   const [session, setSession] = useState<Session | null>(null);
   const [authChecked, setAuthChecked] = useState(!isSupabaseConfigured);
@@ -585,10 +614,11 @@ export function App() {
   const [syncMessage, setSyncMessage] = useState("");
   const hasLoadedCloud = useRef(false);
 
-  const cloudState = useMemo<CloudState>(() => ({ cards, trainerItems, streak, readerBooks }), [cards, trainerItems, streak, readerBooks]);
+  const cloudState = useMemo<CloudState>(() => ({ cards, trainerItems, streak, readerBooks, profile }), [cards, trainerItems, streak, readerBooks, profile]);
   const didNormalizeSchedules = useRef(false);
-  const theme = themeForEmail(session?.user.email);
-  const themeCopy = LEARNING_THEMES[theme];
+  const normalizedProfile = normalizeProfile(profile);
+  const theme = normalizedProfile.theme;
+  const themeCopy = LANGUAGE_COPY[normalizedProfile.language];
 
   useEffect(() => {
     document.body.dataset.theme = session ? theme : "auth";
@@ -669,10 +699,11 @@ export function App() {
 
         const dataRecord = data as { data?: Partial<CloudState> } | null;
         const remote = dataRecord?.data;
-        if (remote?.cards || remote?.trainerItems || remote?.streak) {
+        if (remote?.cards || remote?.trainerItems || remote?.streak || remote?.readerBooks || remote?.readerText || remote?.profile) {
           setCards((remote.cards ?? []).map(normalizeCardSchedule));
           setTrainerItems((remote.trainerItems ?? []).map(normalizeTrainerSchedule));
           setStreak(remote.streak ?? { count: 0, lastStudyDate: "" });
+          setProfile(normalizeProfile(remote.profile));
           if (remote.readerBooks?.length) {
             setReaderBooks(remote.readerBooks);
             setActiveBookId(remote.readerBooks[0].id);
@@ -854,7 +885,12 @@ export function App() {
     setStreak({ count: 0, lastStudyDate: "" });
     setReaderText("");
     setReaderBooks([]);
+    setProfile(DEFAULT_PROFILE);
     setActiveBookId("");
+  };
+
+  const updateProfile = (patch: Partial<UserProfile>) => {
+    setProfile((current) => normalizeProfile({ ...current, ...patch }));
   };
 
   if (isSupabaseConfigured && !authChecked) {
@@ -890,14 +926,23 @@ export function App() {
     );
   }
 
+  if (!normalizedProfile.onboarded) {
+    return (
+      <ProfileSetup
+        profile={normalizedProfile}
+        onSave={(nextProfile) => updateProfile({ ...nextProfile, onboarded: true })}
+      />
+    );
+  }
+
   return (
     <div className={`app-shell ${tab === "review" ? "is-review-app" : ""}`}>
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-mark">{themeCopy.brandMark}</div>
+          <div className="brand-mark">{THEME_OPTIONS[theme].mark}</div>
           <div>
-            <p className="eyebrow">{themeCopy.eyebrow}</p>
-            <h1>{themeCopy.title}</h1>
+            <p className="eyebrow">{THEME_OPTIONS[theme].label}</p>
+            <h1>Language Trainer</h1>
           </div>
         </div>
 
@@ -925,14 +970,16 @@ export function App() {
           difficult={difficultCards}
           total={cards.length}
           themeCopy={themeCopy}
+          profile={normalizedProfile}
           onQuickAdd={() => setTab("add")}
         />
 
-        {tab === "review" && <ReviewView themeCopy={themeCopy} cards={dueCards} allCards={cards} onReview={reviewCard} onUpdateCard={updateCard} onAdd={() => setTab("add")} />}
+        {tab === "review" && <ReviewView themeCopy={themeCopy} cards={dueCards} allCards={cards} onReview={reviewCard} onAdd={() => setTab("add")} />}
         {tab === "reader" && (
           <ReaderView
             theme={theme}
             themeCopy={themeCopy}
+            language={normalizedProfile.language}
             books={readerBooks}
             activeBookId={activeBookId}
             onSelectBook={setActiveBookId}
@@ -960,6 +1007,8 @@ export function App() {
         {tab === "settings" && (
           <SettingsView
             themeCopy={themeCopy}
+            profile={normalizedProfile}
+            onProfileChange={updateProfile}
             email={session?.user.email ?? ""}
             cardsCount={cards.length}
             trainerCount={trainerItems.length}
@@ -1125,23 +1174,89 @@ function StatPill({ icon, label, value }: { icon: React.ReactNode; label: string
   );
 }
 
+function ProfileSetup({ profile, onSave }: { profile: UserProfile; onSave: (profile: UserProfile) => void }) {
+  const [draft, setDraft] = useState<UserProfile>(profile);
+
+  return (
+    <div className="auth-shell setup-shell">
+      <div className="brand auth-brand">
+        <div className="brand-mark">{AUTH_BRAND.brandMark}</div>
+        <div>
+          <p className="eyebrow">{AUTH_BRAND.eyebrow}</p>
+          <h1>{AUTH_BRAND.title}</h1>
+        </div>
+      </div>
+
+      <div className="auth-card setup-card">
+        <div>
+          <p className="eyebrow">Первый запуск</p>
+          <h2>Выбери язык и атмосферу</h2>
+          <p className="muted">Это можно поменять позже в настройках. Аккаунт и карточки останутся твоими.</p>
+        </div>
+
+        <div className="choice-group">
+          <span>Язык обучения</span>
+          <div className="choice-grid">
+            {(Object.keys(LANGUAGE_OPTIONS) as StudyLanguage[]).map((language) => (
+              <button
+                className={draft.language === language ? "is-active" : ""}
+                key={language}
+                onClick={() => setDraft((current) => ({ ...current, language }))}
+              >
+                <strong>{LANGUAGE_OPTIONS[language].label}</strong>
+                <small>{LANGUAGE_OPTIONS[language].hint}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="choice-group">
+          <span>Тема</span>
+          <div className="choice-grid">
+            {(Object.keys(THEME_OPTIONS) as Theme[]).map((theme) => (
+              <button
+                className={draft.theme === theme ? "is-active" : ""}
+                key={theme}
+                onClick={() => setDraft((current) => ({ ...current, theme }))}
+              >
+                <strong>{THEME_OPTIONS[theme].label}</strong>
+                <small>{THEME_OPTIONS[theme].hint}</small>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button className="primary-button" onClick={() => onSave(draft)}>
+          <Check size={18} />
+          <span>Продолжить</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Header({
   due,
   difficult,
   total,
   themeCopy,
+  profile,
   onQuickAdd,
 }: {
   due: number;
   difficult: number;
   total: number;
-  themeCopy: (typeof LEARNING_THEMES)[Theme];
+  themeCopy: LearningCopy;
+  profile: UserProfile;
   onQuickAdd: () => void;
 }) {
   return (
     <section className="top-band">
       <div>
-        <p className="eyebrow">{themeCopy.todayLabel}</p>
+        <div className="top-meta">
+          <p className="eyebrow">{themeCopy.todayLabel}</p>
+          <span className="language-badge">{LANGUAGE_OPTIONS[profile.language].label}</span>
+        </div>
         <h2>Сегодня к повторению {due} карточек</h2>
         <p className="muted">
           В словаре {total} слов, проблемных сейчас {difficult}. Очередь пересчитывается после каждой самопроверки.
@@ -1160,14 +1275,12 @@ function ReviewView({
   cards,
   allCards,
   onReview,
-  onUpdateCard,
   onAdd,
 }: {
-  themeCopy: (typeof LEARNING_THEMES)[Theme];
+  themeCopy: LearningCopy;
   cards: Card[];
   allCards: Card[];
   onReview: (id: string, grade: ReviewGrade) => void;
-  onUpdateCard: (id: string, patch: Partial<Pick<Card, "grammar" | "example" | "association">>) => void;
   onAdd: () => void;
 }) {
   const [revealed, setRevealed] = useState(false);
@@ -1176,8 +1289,6 @@ function ReviewView({
   const [swipeFeedback, setSwipeFeedback] = useState<"known" | "again" | null>(null);
   const didDrag = useRef(false);
   const [articleAnswer, setArticleAnswer] = useState<Article>("");
-  const [associationDraft, setAssociationDraft] = useState("");
-  const [exampleDraft, setExampleDraft] = useState("");
   const card = cards[0];
   const swipeThreshold = 92;
   const nextKnownInterval = card ? REVIEW_INTERVALS[Math.min(completedReviewStep(card), REVIEW_INTERVALS.length - 1)] : REVIEW_INTERVALS[0];
@@ -1185,7 +1296,6 @@ function ReviewView({
   const targetWithoutArticle = card ? germanText(card).replace(/^(der|die|das)\b/i, "").trimStart() : "";
   const needsArticleCheck = Boolean(card && expectedArticle && completedReviewStep(card) > LEARNING_PHASE_STEPS);
   const articlePassed = !needsArticleCheck || articleAnswer === expectedArticle;
-  const isProblemCard = card ? strengthLabel(card) === "проблемное" : false;
 
   useEffect(() => {
     setRevealed(false);
@@ -1194,8 +1304,6 @@ function ReviewView({
     setSwipeFeedback(null);
     didDrag.current = false;
     setArticleAnswer("");
-    setAssociationDraft(card?.association ?? "");
-    setExampleDraft(card?.example ?? "");
   }, [card?.id]);
 
   if (!card) {
@@ -1277,13 +1385,6 @@ function ReviewView({
     }
     if (Math.abs(swipeOffset) > 12) return;
     setRevealed((value) => !value);
-  };
-
-  const saveProblemHelp = () => {
-    onUpdateCard(card.id, {
-      association: associationDraft.trim(),
-      example: exampleDraft.trim(),
-    });
   };
 
   return (
@@ -1383,27 +1484,6 @@ function ReviewView({
                 )}
               </div>
             )}
-
-            {isProblemCard && (
-              <div className="leech-panel" onClick={(event) => event.stopPropagation()}>
-                <div>
-                  <p className="eyebrow">спасти слово</p>
-                  <h4>Добавь крючок для памяти</h4>
-                </div>
-                <label>
-                  <span>Ассоциация</span>
-                  <input value={associationDraft} onChange={(event) => setAssociationDraft(event.target.value)} placeholder="например: звучит как..." />
-                </label>
-                <label>
-                  <span>Свой пример</span>
-                  <textarea value={exampleDraft} onChange={(event) => setExampleDraft(event.target.value)} placeholder="короткое личное предложение" />
-                </label>
-                <button className="secondary-button" onClick={saveProblemHelp}>
-                  <Check size={18} />
-                  <span>Сохранить подсказку</span>
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -1425,6 +1505,7 @@ function ReviewView({
 function ReaderView({
   theme,
   themeCopy,
+  language,
   books,
   activeBookId,
   onSelectBook,
@@ -1434,7 +1515,8 @@ function ReaderView({
   onAdd,
 }: {
   theme: Theme;
-  themeCopy: (typeof LEARNING_THEMES)[Theme];
+  themeCopy: LearningCopy;
+  language: StudyLanguage;
   books: ReaderBook[];
   activeBookId: string;
   onSelectBook: (id: string) => void;
@@ -1470,7 +1552,7 @@ function ReaderView({
     setSaved("");
     setLookupStatus("loading");
 
-    if (theme === "sekta") {
+    if (language === "german") {
       lookupGermanArticle(selected.word).then((article) => {
         if (cancelled) return;
         setTargetWord(article ? `${article} ${selected.word}` : selected.word);
@@ -1488,7 +1570,7 @@ function ReaderView({
     return () => {
       cancelled = true;
     };
-  }, [selected, theme]);
+  }, [selected, language]);
 
   useEffect(() => {
     setSelected(null);
@@ -1548,20 +1630,6 @@ function ReaderView({
     setSaved(`${targetWord.trim()} добавлено`);
   };
 
-  const savePlace = () => {
-    if (!activeBook) return;
-    onUpdateBook(activeBook.id, { position: selected?.offset ?? page.start });
-    setSaved("Место сохранено");
-  };
-
-  const toggleBookCompleted = () => {
-    if (!activeBook) return;
-    onUpdateBook(activeBook.id, {
-      completedAt: activeBook.completedAt ? undefined : new Date().toISOString(),
-      position: activeBook.completedAt ? activeBook.position : Math.max(activeBook.text.length - 1, 0),
-    });
-  };
-
   const jumpToSaved = () => {
     if (!activeBook) return;
     setPageStart(readerPageStartFor(activeBook.text, clampBookPosition(activeBook)));
@@ -1585,7 +1653,7 @@ function ReaderView({
     <section className="reader-section">
       <div className="section-toolbar">
         <div>
-          <p className="eyebrow">{theme === "sekta" ? "Lesezimmer" : "Reading Room"}</p>
+          <p className="eyebrow">{language === "german" ? "Lesezimmer" : "Reading Room"}</p>
           <h3>Чтение</h3>
         </div>
         <label className="secondary-button file-button">
@@ -1619,7 +1687,7 @@ function ReaderView({
                 <textarea
                   value={draftText}
                   onChange={(event) => setDraftText(event.target.value)}
-                  placeholder={theme === "sekta" ? "Вставь немецкий текст..." : "Вставь английский текст B1-B2..."}
+                  placeholder={language === "german" ? "Вставь немецкий текст..." : "Вставь английский текст B1-B2..."}
                 />
               </label>
               <button className="primary-button" onClick={createBook} disabled={!draftText.trim()}>
@@ -1666,7 +1734,7 @@ function ReaderView({
             </label>
             <label>
               <span>Подсказка / грамматика</span>
-              <textarea value={grammar} onChange={(event) => setGrammar(event.target.value)} placeholder={theme === "sekta" ? "Артикль подтянется автоматически, если Wiktionary его отдаст" : "Здесь может появиться английская подсказка из бесплатного словаря"} />
+              <textarea value={grammar} onChange={(event) => setGrammar(event.target.value)} placeholder={language === "german" ? "Артикль подтянется автоматически, если Wiktionary его отдаст" : "Здесь может появиться английская подсказка из бесплатного словаря"} />
             </label>
             <div className="trainer-actions">
               <button className="primary-button" onClick={saveCard} disabled={!targetWord.trim() || !translation.trim()}>
@@ -1690,13 +1758,17 @@ function ReaderView({
                 <ArrowRight size={18} />
                 <span>К месту</span>
               </button>
-              <button className="secondary-button" onClick={savePlace}>
-                <Check size={18} />
-                <span>Закончила здесь</span>
-              </button>
-              <button className="secondary-button" onClick={toggleBookCompleted}>
+              <button
+                className="secondary-button"
+                onClick={() =>
+                  onUpdateBook(activeBook.id, {
+                    completedAt: activeBook.completedAt ? undefined : new Date().toISOString(),
+                    position: activeBook.completedAt ? activeBook.position : Math.max(activeBook.text.length - 1, 0),
+                  })
+                }
+              >
                 <Sparkles size={18} />
-                <span>{activeBook.completedAt ? "Вернуть в чтение" : "Завершить"}</span>
+                <span>{activeBook.completedAt ? "Вернуть" : "Завершить"}</span>
               </button>
               <button className="danger-button" onClick={() => window.confirm("Удалить эту мини-книжку?") && onDeleteBook(activeBook.id)}>
                 <X size={18} />
@@ -1745,7 +1817,7 @@ function ReaderView({
   );
 }
 
-function AddCardView({ themeCopy, onAdd }: { themeCopy: (typeof LEARNING_THEMES)[Theme]; onAdd: (card: NewCardInput) => void }) {
+function AddCardView({ themeCopy, onAdd }: { themeCopy: LearningCopy; onAdd: (card: NewCardInput) => void }) {
   const [form, setForm] = useState({
     russian: "",
     german: "",
@@ -1812,7 +1884,7 @@ function DictionaryView({
   onUpdate,
   onDelete,
 }: {
-  themeCopy: (typeof LEARNING_THEMES)[Theme];
+  themeCopy: LearningCopy;
   cards: Card[];
   onUpdate: (id: string, patch: Partial<Pick<Card, "russian" | "german" | "plural" | "grammar" | "example" | "association">>) => void;
   onDelete: (id: string) => void;
@@ -1972,7 +2044,7 @@ function TrainerView({
   onImport,
   onAnswer,
 }: {
-  themeCopy: (typeof LEARNING_THEMES)[Theme];
+  themeCopy: LearningCopy;
   items: TrainerItem[];
   totalCount: number;
   dueCount: number;
@@ -2130,6 +2202,8 @@ function TrainerView({
 
 function SettingsView({
   themeCopy,
+  profile,
+  onProfileChange,
   email,
   cardsCount,
   trainerCount,
@@ -2137,7 +2211,9 @@ function SettingsView({
   dueTrainerItems,
   onClearTrainer,
 }: {
-  themeCopy: (typeof LEARNING_THEMES)[Theme];
+  themeCopy: LearningCopy;
+  profile: UserProfile;
+  onProfileChange: (patch: Partial<UserProfile>) => void;
   email: string;
   cardsCount: number;
   trainerCount: number;
@@ -2162,13 +2238,44 @@ function SettingsView({
         <div className="settings-card">
           <h4>Профиль</h4>
           <div className="profile-card">
-            <span className="profile-mark">{themeCopy.brandMark}</span>
+            <span className="profile-mark">{THEME_OPTIONS[profile.theme].mark}</span>
             <div>
-              <strong>{themeCopy.title}</strong>
-              <p>{themeCopy.languageName} · {themeCopy.vibeName}</p>
+              <strong>{LANGUAGE_OPTIONS[profile.language].label}</strong>
+              <p>{THEME_OPTIONS[profile.theme].label} · {email}</p>
             </div>
           </div>
-          <p className="muted">{email}</p>
+        </div>
+
+        <div className="settings-card">
+          <h4>Язык обучения</h4>
+          <div className="theme-switch">
+            {(Object.keys(LANGUAGE_OPTIONS) as StudyLanguage[]).map((language) => (
+              <button
+                className={profile.language === language ? "is-active" : ""}
+                key={language}
+                onClick={() => onProfileChange({ language, onboarded: true })}
+              >
+                {LANGUAGE_OPTIONS[language].label}
+              </button>
+            ))}
+          </div>
+          <p className="muted">{LANGUAGE_OPTIONS[profile.language].hint}</p>
+        </div>
+
+        <div className="settings-card">
+          <h4>Тема оформления</h4>
+          <div className="theme-switch">
+            {(Object.keys(THEME_OPTIONS) as Theme[]).map((theme) => (
+              <button
+                className={profile.theme === theme ? "is-active" : ""}
+                key={theme}
+                onClick={() => onProfileChange({ theme, onboarded: true })}
+              >
+                {THEME_OPTIONS[theme].label}
+              </button>
+            ))}
+          </div>
+          <p className="muted">{THEME_OPTIONS[profile.theme].hint}</p>
         </div>
 
         <div className="settings-card">
