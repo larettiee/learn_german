@@ -531,16 +531,36 @@ async function translateReaderWord(word: string, from: "de" | "en", to: "ru" | "
 
   try {
     const response = await fetch(`https://api.mymemory.translated.net/get?${params.toString()}`);
+    if (response.ok) {
+      const payload = await response.json() as {
+        responseData?: { translatedText?: string };
+        matches?: Array<{ translation?: string; match?: number }>;
+      };
+      const direct = payload.responseData?.translatedText?.trim();
+      const bestMatch = payload.matches
+        ?.filter((match) => match.translation?.trim())
+        .sort((first, second) => (second.match ?? 0) - (first.match ?? 0))[0]?.translation?.trim();
+      const translated = direct && direct.toLocaleLowerCase() !== word.toLocaleLowerCase() ? direct : bestMatch ?? "";
+      if (translated && !translated.includes("MYMEMORY WARNING")) return translated.replace(/&#9633;\s*/g, "").trim();
+    }
+  } catch {
+    // Fallback below.
+  }
+
+  const fallbackParams = new URLSearchParams({
+    client: "gtx",
+    sl: from,
+    tl: to,
+    dt: "t",
+    q: word,
+  });
+
+  try {
+    const response = await fetch(`https://translate.googleapis.com/translate_a/single?${fallbackParams.toString()}`);
     if (!response.ok) return "";
-    const payload = await response.json() as {
-      responseData?: { translatedText?: string };
-      matches?: Array<{ translation?: string; match?: number }>;
-    };
-    const direct = payload.responseData?.translatedText?.trim();
-    const bestMatch = payload.matches
-      ?.filter((match) => match.translation?.trim())
-      .sort((first, second) => (second.match ?? 0) - (first.match ?? 0))[0]?.translation?.trim();
-    return direct && direct.toLocaleLowerCase() !== word.toLocaleLowerCase() ? direct : bestMatch ?? "";
+    const payload = await response.json() as unknown;
+    if (!Array.isArray(payload) || !Array.isArray(payload[0])) return "";
+    return payload[0].map((part) => Array.isArray(part) ? part[0] : "").join("").trim();
   } catch {
     return "";
   }
@@ -1620,10 +1640,8 @@ function ReaderView({
   const [pageStart, setPageStart] = useState(0);
   const activeBook = books.find((book) => book.id === activeBookId) ?? books[0];
   const text = activeBook?.text ?? "";
-  const page = useMemo(() => readerPageFor(text, pageStart), [pageStart, text]);
+  const page = useMemo(() => ({ end: text.length, start: 0, text }), [text]);
   const tokens = useMemo(() => tokenizeText(page.text), [page.text]);
-  const hasPreviousPage = page.start > 0;
-  const hasNextPage = page.end < text.length;
 
   useEffect(() => {
     if (!selected) return;
@@ -1965,20 +1983,6 @@ function ReaderView({
                 <span>Удалить книгу</span>
               </button>
             </div>
-          </div>
-        )}
-
-        {activeBook && (
-          <div className="reader-page-controls">
-            <button className="secondary-button" onClick={goToPreviousPage} disabled={!hasPreviousPage}>
-              <ArrowRight className="is-back" size={18} />
-              <span>Назад</span>
-            </button>
-            <span className="tabular">{Math.min(100, Math.round((page.end / Math.max(text.length, 1)) * 100))}% текста</span>
-            <button className="secondary-button" onClick={goToNextPage} disabled={!hasNextPage}>
-              <ArrowRight size={18} />
-              <span>Дальше</span>
-            </button>
           </div>
         )}
 

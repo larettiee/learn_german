@@ -2826,7 +2826,7 @@ body[data-theme="viper"] textarea {
 
   .book-actions {
     display: grid;
-    grid-template-columns: auto 1fr 1fr minmax(116px, auto);
+    grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
     gap: 6px;
   }
 
@@ -2839,6 +2839,8 @@ body[data-theme="viper"] textarea {
   }
 
   .book-actions .danger-button {
+    grid-column: 2 / 4;
+    justify-content: center;
     min-width: 116px;
     padding: 0 12px;
   }
