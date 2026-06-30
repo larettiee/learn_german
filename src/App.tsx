@@ -31,6 +31,7 @@ type ReviewGrade = "again" | "hard" | "good" | "easy";
 
 type Card = {
   id: string;
+  language?: StudyLanguage;
   russian: string;
   german: string;
   article?: Article;
@@ -57,6 +58,7 @@ type NewCardInput = Omit<
 
 type TrainerItem = {
   id: string;
+  language?: StudyLanguage;
   russian: string;
   german: string;
   nextReview?: string;
@@ -72,6 +74,7 @@ type TrainerItem = {
 
 type ReaderBook = {
   id: string;
+  language?: StudyLanguage;
   title: string;
   text: string;
   position: number;
@@ -277,6 +280,10 @@ function existingUserProfile(profile?: Partial<UserProfile>): UserProfile {
     ...normalizeProfile(profile),
     onboarded: true,
   };
+}
+
+function withLanguage<T extends { language?: StudyLanguage }>(item: T, language: StudyLanguage): T {
+  return item.language ? item : { ...item, language };
 }
 
 function normalizeAnswer(value: string) {
@@ -622,29 +629,35 @@ export function App() {
   const [syncMessage, setSyncMessage] = useState("");
   const hasLoadedCloud = useRef(false);
 
-  const cloudState = useMemo<CloudState>(() => ({ cards, trainerItems, streak, readerBooks, profile }), [cards, trainerItems, streak, readerBooks, profile]);
   const didNormalizeSchedules = useRef(false);
   const normalizedProfile = normalizeProfile(profile);
+  const activeLanguage = normalizedProfile.language;
   const theme = normalizedProfile.theme;
   const themeCopy = LANGUAGE_COPY[normalizedProfile.language];
+  const cloudState = useMemo<CloudState>(() => ({ cards, trainerItems, streak, readerBooks, profile: normalizedProfile }), [cards, trainerItems, streak, readerBooks, normalizedProfile]);
+  const activeCards = useMemo(() => cards.filter((card) => (card.language ?? activeLanguage) === activeLanguage), [cards, activeLanguage]);
+  const activeTrainerPool = useMemo(() => trainerItems.filter((item) => (item.language ?? activeLanguage) === activeLanguage), [trainerItems, activeLanguage]);
+  const activeReaderBooks = useMemo(() => readerBooks.filter((book) => (book.language ?? activeLanguage) === activeLanguage), [readerBooks, activeLanguage]);
 
   useEffect(() => {
-    document.body.dataset.theme = session ? theme : "auth";
+    document.body.dataset.theme = isSupabaseConfigured && !session ? "auth" : theme;
   }, [session, theme]);
 
   useEffect(() => {
     if (didNormalizeSchedules.current) return;
     didNormalizeSchedules.current = true;
 
-    setCards((current) => current.map(normalizeCardSchedule));
-    setTrainerItems((current) => current.map(normalizeTrainerSchedule));
-  }, [setCards, setTrainerItems]);
+    setCards((current) => current.map((card) => withLanguage(normalizeCardSchedule(card), activeLanguage)));
+    setTrainerItems((current) => current.map((item) => withLanguage(normalizeTrainerSchedule(item), activeLanguage)));
+    setReaderBooks((current) => current.map((book) => withLanguage(book, activeLanguage)));
+  }, [setCards, setTrainerItems, setReaderBooks, activeLanguage]);
 
   useEffect(() => {
     if (readerBooks.length || !readerText.trim()) return;
     const now = new Date().toISOString();
     const migrated: ReaderBook = {
       id: uid(),
+      language: activeLanguage,
       title: titleFromText(readerText),
       text: readerText,
       position: 0,
@@ -654,17 +667,17 @@ export function App() {
     setReaderBooks([migrated]);
     setActiveBookId(migrated.id);
     setReaderText("");
-  }, [readerBooks.length, readerText, setReaderBooks, setReaderText]);
+  }, [readerBooks.length, readerText, setReaderBooks, setReaderText, activeLanguage]);
 
   useEffect(() => {
-    if (!readerBooks.length) {
+    if (!activeReaderBooks.length) {
       setActiveBookId("");
       return;
     }
-    if (!activeBookId || !readerBooks.some((book) => book.id === activeBookId)) {
-      setActiveBookId(readerBooks[0].id);
+    if (!activeBookId || !activeReaderBooks.some((book) => book.id === activeBookId)) {
+      setActiveBookId(activeReaderBooks[0].id);
     }
-  }, [activeBookId, readerBooks]);
+  }, [activeBookId, activeReaderBooks]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -708,13 +721,15 @@ export function App() {
         const dataRecord = data as { data?: Partial<CloudState> } | null;
         const remote = dataRecord?.data;
         if (remote?.cards || remote?.trainerItems || remote?.streak || remote?.readerBooks || remote?.readerText || remote?.profile) {
-          setCards((remote.cards ?? []).map(normalizeCardSchedule));
-          setTrainerItems((remote.trainerItems ?? []).map(normalizeTrainerSchedule));
+          const remoteProfile = remote.profile ? normalizeProfile(remote.profile) : existingUserProfile();
+          setCards((remote.cards ?? []).map((card) => withLanguage(normalizeCardSchedule(card), remoteProfile.language)));
+          setTrainerItems((remote.trainerItems ?? []).map((item) => withLanguage(normalizeTrainerSchedule(item), remoteProfile.language)));
           setStreak(remote.streak ?? { count: 0, lastStudyDate: "" });
-          setProfile(remote.profile ? normalizeProfile(remote.profile) : existingUserProfile());
+          setProfile(remoteProfile);
           if (remote.readerBooks?.length) {
-            setReaderBooks(remote.readerBooks);
-            setActiveBookId(remote.readerBooks[0].id);
+            const booksWithLanguage = remote.readerBooks.map((book) => withLanguage(book, remoteProfile.language));
+            setReaderBooks(booksWithLanguage);
+            setActiveBookId(booksWithLanguage.find((book) => book.language === remoteProfile.language)?.id ?? booksWithLanguage[0].id);
             setReaderText("");
           } else {
             setReaderBooks([]);
@@ -764,24 +779,24 @@ export function App() {
 
   const dueCards = useMemo(
     () =>
-      cards
+      activeCards
         .filter(isDue)
         .sort((a, b) => new Date(a.nextReview).getTime() - new Date(b.nextReview).getTime()),
-    [cards],
+    [activeCards],
   );
   const dueTrainerItems = useMemo(
     () =>
-      trainerItems
+      activeTrainerPool
         .filter(isTrainerDue)
         .sort((a, b) => new Date(a.nextReview ?? today()).getTime() - new Date(b.nextReview ?? today()).getTime()),
-    [trainerItems],
+    [activeTrainerPool],
   );
   const activeTrainerItems = useMemo(() => dueTrainerItems.slice(0, TRAINER_BATCH_SIZE), [dueTrainerItems]);
-  const difficultCards = cards.filter((card) => strengthLabel(card) === "проблемное").length;
-  const totalAttempts = cards.reduce((sum, card) => sum + card.attempts, 0);
-  const totalCorrect = cards.reduce((sum, card) => sum + card.correct, 0);
-  const trainerAttempts = trainerItems.reduce((sum, item) => sum + item.attempts, 0);
-  const trainerCorrect = trainerItems.reduce((sum, item) => sum + item.correct, 0);
+  const difficultCards = activeCards.filter((card) => strengthLabel(card) === "проблемное").length;
+  const totalAttempts = activeCards.reduce((sum, card) => sum + card.attempts, 0);
+  const totalCorrect = activeCards.reduce((sum, card) => sum + card.correct, 0);
+  const trainerAttempts = activeTrainerPool.reduce((sum, item) => sum + item.attempts, 0);
+  const trainerCorrect = activeTrainerPool.reduce((sum, item) => sum + item.correct, 0);
 
   const markStudiedToday = () => {
     const current = today();
@@ -797,6 +812,7 @@ export function App() {
     const nextCard: Card = {
       ...card,
       id: uid(),
+      language: activeLanguage,
       createdAt: new Date().toISOString(),
       nextReview: today(),
       intervalDays: REVIEW_INTERVALS[0],
@@ -827,6 +843,7 @@ export function App() {
     const mapped = items.map((item) => ({
       ...item,
       id: uid(),
+      language: activeLanguage,
       attempts: 0,
       correct: 0,
       wrong: 0,
@@ -847,7 +864,7 @@ export function App() {
   };
 
   const clearTrainerItems = () => {
-    setTrainerItems([]);
+    setTrainerItems((current) => current.filter((item) => (item.language ?? activeLanguage) !== activeLanguage));
   };
 
   const createReaderBook = (text: string, title?: string) => {
@@ -856,6 +873,7 @@ export function App() {
     const now = new Date().toISOString();
     const book: ReaderBook = {
       id: uid(),
+      language: activeLanguage,
       title: title?.trim() || titleFromText(trimmed),
       text: trimmed,
       position: 0,
@@ -969,28 +987,30 @@ export function App() {
 
         <div className="sidebar-stats">
           <StatPill icon={<Flame />} label="Streak" value={`${streak.count} дн.`} />
-          <StatPill icon={<Layers />} label="Слов" value={String(cards.length)} />
+          <StatPill icon={<Layers />} label="Слов" value={String(activeCards.length)} />
           <StatPill icon={<ClipboardList />} label="Точность" value={`${accuracy(totalCorrect, totalAttempts)}%`} />
         </div>
       </aside>
 
       <main className={`main-panel ${tab === "review" ? "is-review-mode" : ""} ${tab === "reader" ? "is-reader-mode" : ""}`}>
-        <Header
-          due={dueCards.length}
-          difficult={difficultCards}
-          total={cards.length}
-          themeCopy={themeCopy}
-          profile={normalizedProfile}
-          onQuickAdd={() => setTab("add")}
-        />
+        {(tab === "review" || tab === "add") && (
+          <Header
+            due={dueCards.length}
+            difficult={difficultCards}
+            total={activeCards.length}
+            themeCopy={themeCopy}
+            profile={normalizedProfile}
+            onQuickAdd={() => setTab("add")}
+          />
+        )}
 
-        {tab === "review" && <ReviewView themeCopy={themeCopy} cards={dueCards} allCards={cards} onReview={reviewCard} onAdd={() => setTab("add")} />}
+        {tab === "review" && <ReviewView themeCopy={themeCopy} cards={dueCards} allCards={activeCards} onReview={reviewCard} onAdd={() => setTab("add")} />}
         {tab === "reader" && (
           <ReaderView
             theme={theme}
             themeCopy={themeCopy}
             language={normalizedProfile.language}
-            books={readerBooks}
+            books={activeReaderBooks}
             activeBookId={activeBookId}
             onSelectBook={setActiveBookId}
             onCreateBook={createReaderBook}
@@ -1000,12 +1020,12 @@ export function App() {
           />
         )}
         {tab === "add" && <AddCardView themeCopy={themeCopy} onAdd={addCard} />}
-        {tab === "dictionary" && <DictionaryView themeCopy={themeCopy} cards={cards} onUpdate={updateCard} onDelete={deleteCard} />}
+        {tab === "dictionary" && <DictionaryView themeCopy={themeCopy} cards={activeCards} onUpdate={updateCard} onDelete={deleteCard} />}
         {tab === "trainer" && (
           <TrainerView
             themeCopy={themeCopy}
             items={activeTrainerItems}
-            totalCount={trainerItems.length}
+            totalCount={activeTrainerPool.length}
             dueCount={dueTrainerItems.length}
             batchSize={TRAINER_BATCH_SIZE}
             correctCount={trainerCorrect}
@@ -1020,8 +1040,8 @@ export function App() {
             profile={normalizedProfile}
             onProfileChange={updateProfile}
             email={session?.user.email ?? ""}
-            cardsCount={cards.length}
-            trainerCount={trainerItems.length}
+            cardsCount={activeCards.length}
+            trainerCount={activeTrainerPool.length}
             dueCards={dueCards.length}
             dueTrainerItems={dueTrainerItems.length}
             session={session}
