@@ -1708,20 +1708,34 @@ function ReaderView({
       onUpdateBook(activeBook.id, { position: selectedStart });
     }
     const wordRect = event.currentTarget.getBoundingClientRect();
-    const layoutRect = event.currentTarget.closest(".reader-layout")?.getBoundingClientRect();
-    const anchorY = layoutRect ? wordRect.top - layoutRect.top : wordRect.top;
+    const isArticleTap = language === "german" && /^(der|die|das)$/i.test(cleanReaderWord(word));
+    const shouldOpenBelow = wordRect.top < 300;
     setSelected({
       word: cleaned,
       context: sentenceContext(text, cleaned, selectedStart),
       offset: selectedStart,
       anchor: {
-        x: layoutRect ? wordRect.left - layoutRect.left + wordRect.width / 2 : wordRect.left + wordRect.width / 2,
-        y: language === "german" && /^(der|die|das)$/i.test(cleanReaderWord(word))
-          ? anchorY + wordRect.height + 8
-          : anchorY,
-        placement: anchorY < 270 ? "below" : "above",
+        x: wordRect.left + wordRect.width / 2,
+        y: shouldOpenBelow || isArticleTap ? wordRect.bottom : wordRect.top,
+        placement: shouldOpenBelow || isArticleTap ? "below" : "above",
       },
     });
+    const syncAnchorToWord = () => {
+      const anchoredWord = document.querySelector<HTMLElement>(`[data-reader-offset="${selectedStart}"]`);
+      const currentRect = anchoredWord?.getBoundingClientRect();
+      if (!currentRect) return;
+      const openBelow = currentRect.top < 300;
+      setSelected((current) => current?.offset === selectedStart ? {
+        ...current,
+        anchor: {
+          x: currentRect.left + currentRect.width / 2,
+          y: openBelow ? currentRect.bottom : currentRect.top,
+          placement: openBelow ? "below" : "above",
+        },
+      } : current);
+    };
+    window.requestAnimationFrame(syncAnchorToWord);
+    window.setTimeout(syncAnchorToWord, 120);
   };
 
   const uploadText = (file: File | undefined) => {
@@ -1946,9 +1960,9 @@ function ReaderView({
                 <Sparkles size={18} />
                 <span>{activeBook.completedAt ? "Вернуть" : "Завершить"}</span>
               </button>
-              <button className="danger-button" onClick={() => window.confirm("Удалить эту мини-книжку?") && onDeleteBook(activeBook.id)}>
+              <button className="danger-button book-delete-button" onClick={() => window.confirm("Удалить эту мини-книжку?") && onDeleteBook(activeBook.id)}>
                 <X size={18} />
-                <span>Удалить</span>
+                <span>Удалить книгу</span>
               </button>
             </div>
           </div>

@@ -1944,10 +1944,11 @@ textarea:focus {
   --lookup-x: 50%;
   --lookup-y: 0px;
   --lookup-edge: 190px;
-  position: absolute;
+  position: fixed;
   top: var(--lookup-y);
-  left: clamp(var(--lookup-edge), var(--lookup-x), calc(100% - var(--lookup-edge)));
-  z-index: 8;
+  left: clamp(var(--lookup-edge), var(--lookup-x), calc(100vw - var(--lookup-edge)));
+  order: 99;
+  z-index: 80;
   display: grid;
   width: min(380px, calc(100% - 24px));
   gap: 10px;
@@ -1962,7 +1963,7 @@ textarea:focus {
     0 18px 52px -30px rgba(2, 22, 28, 0.78),
     0 6px 18px -12px rgba(2, 22, 28, 0.42);
   transform: translate(-50%, calc(-100% - 16px));
-  animation: lift-in 260ms cubic-bezier(0.2, 0, 0, 1) forwards;
+  animation: none;
 }
 
 .reader-lookup.is-below {
@@ -2088,6 +2089,7 @@ body[data-theme="sekta"] .reader-text {
 }
 
 body[data-theme="sekta"] .reader-lookup {
+  position: fixed;
   background:
     linear-gradient(145deg, rgba(246, 252, 251, 0.96), rgba(202, 221, 220, 0.92)),
     var(--panel-bg);
@@ -2130,6 +2132,7 @@ body[data-theme="viper"] .book-toolbar {
 }
 
 body[data-theme="viper"] .reader-lookup {
+  position: fixed;
   border-left: 0;
   background:
     linear-gradient(145deg, rgba(255, 252, 245, 0.96), rgba(255, 225, 242, 0.92)),
@@ -2823,7 +2826,7 @@ body[data-theme="viper"] textarea {
 
   .book-actions {
     display: grid;
-    grid-template-columns: auto 1fr 1fr 44px;
+    grid-template-columns: auto 1fr 1fr minmax(116px, auto);
     gap: 6px;
   }
 
@@ -2836,17 +2839,8 @@ body[data-theme="viper"] textarea {
   }
 
   .book-actions .danger-button {
-    width: 44px;
-    padding: 0;
-  }
-
-  .book-actions .danger-button span {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0 0 0 0);
-    white-space: nowrap;
+    min-width: 116px;
+    padding: 0 12px;
   }
 
   .reader-progress-pill {
@@ -2866,13 +2860,14 @@ body[data-theme="viper"] textarea {
 
   .reader-lookup {
     --lookup-edge: 0px;
-    position: absolute;
+    position: fixed;
+    top: var(--lookup-y);
     left: 12px;
     right: 12px;
     width: auto;
     max-height: min(54dvh, 430px);
-    gap: 8px;
-    padding: 12px;
+    gap: 6px;
+    padding: 10px;
     overflow-y: visible;
     overscroll-behavior: contain;
     transform: translateY(calc(-100% - 16px));
@@ -2885,14 +2880,19 @@ body[data-theme="viper"] textarea {
 
   .reader-form-grid {
     grid-template-columns: 1fr;
-    gap: 7px;
+    gap: 5px;
+  }
+
+  .reader-lookup .eyebrow,
+  .reader-form-grid label span {
+    display: none;
   }
 
   .reader-lookup input,
   .reader-lookup textarea {
-    min-height: 40px;
-    padding: 8px 10px;
-    font-size: 0.94rem;
+    min-height: 36px;
+    padding: 7px 9px;
+    font-size: 0.9rem;
   }
 
   .lookup-context-field {
@@ -2905,13 +2905,13 @@ body[data-theme="viper"] textarea {
 
   .lookup-translation-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 6px;
+    gap: 5px;
   }
 
   .lookup-translation-grid div {
     grid-template-columns: 1fr;
     align-items: start;
-    padding: 8px 10px;
+    padding: 6px 8px;
   }
 
   .lookup-translation-grid strong {
@@ -2924,9 +2924,9 @@ body[data-theme="viper"] textarea {
   }
 
   .lookup-close-button {
-    width: 44px;
-    height: 44px;
-    flex-basis: 44px;
+    width: 42px;
+    height: 42px;
+    flex-basis: 42px;
     margin: -4px -4px 0 0;
   }
 
@@ -2937,7 +2937,7 @@ body[data-theme="viper"] textarea {
   }
 
   .reader-lookup .primary-button {
-    min-height: 42px;
+    min-height: 38px;
   }
 
   body[data-theme="sekta"] .reader-lookup::before,
@@ -3166,12 +3166,13 @@ body[data-theme="viper"] textarea {
   }
 
   .reader-lookup {
-    position: absolute;
+    position: fixed;
+    top: var(--lookup-y);
     left: 12px;
     right: 12px;
     width: auto;
     max-height: min(54dvh, 430px);
-    padding: 12px;
+    padding: 10px;
     border-radius: 14px;
     transform: translateY(calc(-100% - 16px));
   }
