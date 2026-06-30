@@ -1601,7 +1601,12 @@ function ReaderView({
   onDeleteBook: (id: string) => void;
   onAdd: (card: NewCardInput) => void;
 }) {
-  const [selected, setSelected] = useState<{ word: string; context: string; offset: number } | null>(null);
+  const [selected, setSelected] = useState<{
+    word: string;
+    context: string;
+    offset: number;
+    anchor: { x: number; y: number; placement: "above" | "below" };
+  } | null>(null);
   const [draftText, setDraftText] = useState("");
   const [draftTitle, setDraftTitle] = useState("");
   const [showNewBook, setShowNewBook] = useState(!books.length);
@@ -1687,7 +1692,7 @@ function ReaderView({
     }
   }, [books.length]);
 
-  const selectWord = (word: string, tokenStart: number) => {
+  const selectWord = (word: string, tokenStart: number, event: React.MouseEvent<HTMLButtonElement>) => {
     let cleaned = cleanReaderWord(word);
     let selectedStart = tokenStart;
     if (language === "german" && /^(der|die|das)$/i.test(cleaned)) {
@@ -1702,10 +1707,20 @@ function ReaderView({
     if (activeBook) {
       onUpdateBook(activeBook.id, { position: selectedStart });
     }
+    const wordRect = event.currentTarget.getBoundingClientRect();
+    const layoutRect = event.currentTarget.closest(".reader-layout")?.getBoundingClientRect();
+    const anchorY = layoutRect ? wordRect.top - layoutRect.top : wordRect.top;
     setSelected({
       word: cleaned,
       context: sentenceContext(text, cleaned, selectedStart),
       offset: selectedStart,
+      anchor: {
+        x: layoutRect ? wordRect.left - layoutRect.left + wordRect.width / 2 : wordRect.left + wordRect.width / 2,
+        y: language === "german" && /^(der|die|das)$/i.test(cleanReaderWord(word))
+          ? anchorY + wordRect.height + 8
+          : anchorY,
+        placement: anchorY < 270 ? "below" : "above",
+      },
     });
   };
 
@@ -1737,7 +1752,13 @@ function ReaderView({
       example: selected.context,
       lastReviewedAt: undefined,
     });
-    setSaved(`${targetWord.trim()} добавлено`);
+    setSaved("");
+    setSelected(null);
+    setTargetWord("");
+    setTranslation("");
+    setLookupTranslations({});
+    setGrammar("");
+    setLookupStatus("idle");
   };
 
   const jumpToSaved = () => {
@@ -1835,7 +1856,13 @@ function ReaderView({
         </div>
 
         {selected && (
-          <div className="reader-lookup">
+          <div
+            className={`reader-lookup is-${selected.anchor.placement}`}
+            style={{
+              "--lookup-x": `${selected.anchor.x}px`,
+              "--lookup-y": `${selected.anchor.y}px`,
+            } as React.CSSProperties}
+          >
             <div className="lookup-head">
               <div>
                 <p className="eyebrow">{lookupStatus === "loading" ? "ищу подсказку" : "карточка из текста"}</p>
@@ -1877,11 +1904,11 @@ function ReaderView({
                 )}
               </div>
             )}
-            <label>
+            <label className="lookup-context-field">
               <span>Контекст</span>
               <textarea value={selected.context} readOnly />
             </label>
-            <label>
+            <label className="lookup-grammar-field">
               <span>Подсказка / грамматика</span>
               <textarea value={grammar} onChange={(event) => setGrammar(event.target.value)} placeholder={language === "german" ? "Артикль подтянется автоматически, если Wiktionary его отдаст" : "Здесь может появиться английская подсказка из бесплатного словаря"} />
             </label>
@@ -1954,7 +1981,7 @@ function ReaderView({
               cursor += token.length;
               if (!isWordToken(token)) return <span key={`${token}-${index}`}>{token}</span>;
               return (
-                <button className="reader-word" key={`${token}-${index}`} data-reader-offset={tokenStart} onClick={() => selectWord(token, tokenStart)}>
+                <button className="reader-word" key={`${token}-${index}`} data-reader-offset={tokenStart} onClick={(event) => selectWord(token, tokenStart, event)}>
                   {token}
                 </button>
               );

@@ -1936,13 +1936,22 @@ textarea:focus {
   transform: rotate(180deg);
 }
 
+.reader-layout {
+  position: relative;
+}
+
 .reader-lookup {
-  position: sticky;
-  top: 18px;
+  --lookup-x: 50%;
+  --lookup-y: 0px;
+  --lookup-edge: 190px;
+  position: absolute;
+  top: var(--lookup-y);
+  left: clamp(var(--lookup-edge), var(--lookup-x), calc(100% - var(--lookup-edge)));
   z-index: 8;
   display: grid;
-  gap: 14px;
-  padding: 18px;
+  width: min(380px, calc(100% - 24px));
+  gap: 10px;
+  padding: 14px;
   color: var(--ink);
   background:
     linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(236, 244, 243, 0.9)),
@@ -1952,14 +1961,19 @@ textarea:focus {
     0 0 0 1px rgba(255, 255, 255, 0.68),
     0 18px 52px -30px rgba(2, 22, 28, 0.78),
     0 6px 18px -12px rgba(2, 22, 28, 0.42);
+  transform: translate(-50%, calc(-100% - 16px));
   animation: lift-in 260ms cubic-bezier(0.2, 0, 0, 1) forwards;
+}
+
+.reader-lookup.is-below {
+  transform: translate(-50%, 12px);
 }
 
 .lookup-head {
   display: flex;
   align-items: start;
   justify-content: space-between;
-  gap: 14px;
+  gap: 10px;
 }
 
 .lookup-close-button {
@@ -1967,8 +1981,8 @@ textarea:focus {
 }
 
 .lookup-head h4 {
-  margin-top: 3px;
-  font-size: clamp(1.5rem, 4vw, 2.5rem);
+  margin-top: 1px;
+  font-size: clamp(1.25rem, 3.2vw, 1.9rem);
 }
 
 .reader-form-grid {
@@ -2016,7 +2030,7 @@ textarea:focus {
 
 .reader-text {
   min-height: 320px;
-  padding: 24px;
+  padding: 24px 24px 72px;
   color: var(--ink);
   background: var(--panel-bg);
   border-radius: 18px;
@@ -2844,28 +2858,65 @@ body[data-theme="viper"] textarea {
   .reader-text {
     min-height: 66dvh;
     max-height: 74dvh;
+    padding-bottom: 96px;
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
   }
 
   .reader-lookup {
-    position: static;
-    max-height: 34dvh;
-    overflow-y: auto;
+    --lookup-edge: 0px;
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: min(54dvh, 430px);
+    gap: 8px;
+    padding: 12px;
+    overflow-y: visible;
     overscroll-behavior: contain;
+    transform: translateY(calc(-100% - 16px));
     animation: none;
   }
 
-  .lookup-translation-grid {
+  .reader-lookup.is-below {
+    transform: translateY(10px);
+  }
+
+  .reader-form-grid {
     grid-template-columns: 1fr;
+    gap: 7px;
+  }
+
+  .reader-lookup input,
+  .reader-lookup textarea {
+    min-height: 40px;
+    padding: 8px 10px;
+    font-size: 0.94rem;
+  }
+
+  .lookup-context-field {
+    display: none;
+  }
+
+  .lookup-grammar-field {
+    display: none;
+  }
+
+  .lookup-translation-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
   }
 
   .lookup-translation-grid div {
-    grid-template-columns: 34px minmax(0, 1fr);
-    align-items: center;
+    grid-template-columns: 1fr;
+    align-items: start;
     padding: 8px 10px;
+  }
+
+  .lookup-translation-grid strong {
+    font-size: 0.8rem;
+    line-height: 1.2;
   }
 
   .lookup-head {
@@ -2873,10 +2924,20 @@ body[data-theme="viper"] textarea {
   }
 
   .lookup-close-button {
-    width: 52px;
-    height: 52px;
-    flex-basis: 52px;
-    margin: -6px -8px 0 0;
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
+    margin: -4px -4px 0 0;
+  }
+
+  .reader-lookup .trainer-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+
+  .reader-lookup .primary-button {
+    min-height: 42px;
   }
 
   body[data-theme="sekta"] .reader-lookup::before,
@@ -3105,16 +3166,24 @@ body[data-theme="viper"] textarea {
   }
 
   .reader-lookup {
-    position: static;
-    max-height: 34dvh;
-    padding: 14px;
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    width: auto;
+    max-height: min(54dvh, 430px);
+    padding: 12px;
     border-radius: 14px;
+    transform: translateY(calc(-100% - 16px));
+  }
+
+  .reader-lookup.is-below {
+    transform: translateY(10px);
   }
 
   .reader-text {
     min-height: 66dvh;
     max-height: 74dvh;
-    padding: 14px;
+    padding: 14px 14px 96px;
     border-radius: 16px;
     font-size: 1.03rem;
     line-height: 1.78;
