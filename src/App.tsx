@@ -11,6 +11,7 @@ import {
   Flame,
   Import,
   Layers,
+  Menu,
   Pencil,
   Plus,
   Search,
@@ -111,7 +112,7 @@ const REVIEW_INTERVALS = [1 / 24, 3 / 24, 12 / 24, 1, 3, 7, 14, 30];
 const LEARNING_PHASE_STEPS = 4;
 const TRAINER_BATCH_SIZE = 10;
 const TRAINER_MASTERY_STREAK = 3;
-const READER_PAGE_CHARS = 1600;
+const READER_PAGE_CHARS = 3200;
 const DICTIONARY_PAGE_SIZE = 80;
 
 const LANGUAGE_COPY: Record<
@@ -271,6 +272,13 @@ function normalizeProfile(profile?: Partial<UserProfile>): UserProfile {
   };
 }
 
+function existingUserProfile(profile?: Partial<UserProfile>): UserProfile {
+  return {
+    ...normalizeProfile(profile),
+    onboarded: true,
+  };
+}
+
 function normalizeAnswer(value: string) {
   return value
     .trim()
@@ -411,7 +419,7 @@ function tokenizeText(text: string) {
 function readerPageStartFor(text: string, position: number) {
   if (text.length <= READER_PAGE_CHARS) return 0;
   const safePosition = Math.max(0, Math.min(position, text.length - 1));
-  return Math.max(0, Math.min(Math.floor(safePosition / READER_PAGE_CHARS) * READER_PAGE_CHARS, text.length - READER_PAGE_CHARS));
+  return Math.max(0, Math.min(safePosition, text.length - 1));
 }
 
 function readerPageFor(text: string, start: number) {
@@ -703,7 +711,7 @@ export function App() {
           setCards((remote.cards ?? []).map(normalizeCardSchedule));
           setTrainerItems((remote.trainerItems ?? []).map(normalizeTrainerSchedule));
           setStreak(remote.streak ?? { count: 0, lastStudyDate: "" });
-          setProfile(normalizeProfile(remote.profile));
+          setProfile(remote.profile ? normalizeProfile(remote.profile) : existingUserProfile());
           if (remote.readerBooks?.length) {
             setReaderBooks(remote.readerBooks);
             setActiveBookId(remote.readerBooks[0].id);
@@ -926,7 +934,7 @@ export function App() {
     );
   }
 
-  if (!normalizedProfile.onboarded) {
+  if (!normalizedProfile.onboarded && (!isSupabaseConfigured || !session || hasLoadedCloud.current)) {
     return (
       <ProfileSetup
         profile={normalizedProfile}
@@ -955,7 +963,9 @@ export function App() {
           <TabButton icon={<Settings />} label="Настройки" active={tab === "settings"} onClick={() => setTab("settings")} />
         </nav>
 
-        <SyncPanel session={session} syncStatus={syncStatus} syncMessage={syncMessage} onSignedOut={clearLocalState} />
+        <div className="sidebar-sync">
+          <SyncPanel session={session} syncStatus={syncStatus} syncMessage={syncMessage} onSignedOut={clearLocalState} />
+        </div>
 
         <div className="sidebar-stats">
           <StatPill icon={<Flame />} label="Streak" value={`${streak.count} дн.`} />
@@ -964,7 +974,7 @@ export function App() {
         </div>
       </aside>
 
-      <main className={`main-panel ${tab === "review" ? "is-review-mode" : ""}`}>
+      <main className={`main-panel ${tab === "review" ? "is-review-mode" : ""} ${tab === "reader" ? "is-reader-mode" : ""}`}>
         <Header
           due={dueCards.length}
           difficult={difficultCards}
@@ -1014,6 +1024,10 @@ export function App() {
             trainerCount={trainerItems.length}
             dueCards={dueCards.length}
             dueTrainerItems={dueTrainerItems.length}
+            session={session}
+            syncStatus={syncStatus}
+            syncMessage={syncMessage}
+            onSignedOut={clearLocalState}
             onClearTrainer={clearTrainerItems}
           />
         )}
@@ -1529,6 +1543,7 @@ function ReaderView({
   const [draftText, setDraftText] = useState("");
   const [draftTitle, setDraftTitle] = useState("");
   const [showNewBook, setShowNewBook] = useState(!books.length);
+  const [showLibrary, setShowLibrary] = useState(!books.length);
   const [targetWord, setTargetWord] = useState("");
   const [translation, setTranslation] = useState("");
   const [grammar, setGrammar] = useState("");
@@ -1584,7 +1599,10 @@ function ReaderView({
   }, [activeBook?.id, activeBook?.text.length]);
 
   useEffect(() => {
-    if (!books.length) setShowNewBook(true);
+    if (!books.length) {
+      setShowNewBook(true);
+      setShowLibrary(true);
+    }
   }, [books.length]);
 
   const selectWord = (word: string, tokenStart: number) => {
@@ -1615,6 +1633,7 @@ function ReaderView({
     setDraftText("");
     setDraftTitle("");
     setShowNewBook(false);
+    setShowLibrary(false);
   };
 
   const saveCard = () => {
@@ -1639,12 +1658,16 @@ function ReaderView({
   const goToPreviousPage = () => {
     if (!activeBook) return;
     const nextStart = Math.max(0, page.start - READER_PAGE_CHARS);
-    setPageStart(readerPageStartFor(activeBook.text, nextStart));
+    const normalizedStart = readerPageStartFor(activeBook.text, nextStart);
+    setPageStart(normalizedStart);
+    onUpdateBook(activeBook.id, { position: normalizedStart });
   };
 
   const goToNextPage = () => {
     if (!activeBook) return;
-    setPageStart(readerPageStartFor(activeBook.text, page.end));
+    const normalizedStart = readerPageStartFor(activeBook.text, page.end);
+    setPageStart(normalizedStart);
+    onUpdateBook(activeBook.id, { position: normalizedStart });
   };
 
   let cursor = page.start;
@@ -1654,26 +1677,32 @@ function ReaderView({
       <div className="section-toolbar">
         <div>
           <p className="eyebrow">{language === "german" ? "Lesezimmer" : "Reading Room"}</p>
-          <h3>Чтение</h3>
+          <h3>{activeBook?.title ?? "Чтение"}</h3>
         </div>
-        <label className="secondary-button file-button">
-          <Import size={18} />
-          <span>TXT</span>
-          <input type="file" accept=".txt,text/plain" onChange={(event) => uploadText(event.target.files?.[0])} />
-        </label>
+        <button className="secondary-button reader-menu-button" onClick={() => setShowLibrary((value) => !value)}>
+          <Menu size={18} />
+          <span>Книги</span>
+        </button>
       </div>
 
       <div className="reader-layout">
-        <div className="book-shelf">
+        <div className={`book-shelf ${showLibrary ? "is-open" : ""}`}>
           <div className="book-shelf-head">
             <div>
               <p className="eyebrow">мини-книжки</p>
               <h4>Библиотека</h4>
             </div>
-            <button className="secondary-button" onClick={() => setShowNewBook((value) => !value)}>
-              <Plus size={18} />
-              <span>Новая</span>
-            </button>
+            <div className="book-shelf-actions">
+              <label className="secondary-button file-button">
+                <Import size={18} />
+                <span>TXT</span>
+                <input type="file" accept=".txt,text/plain" onChange={(event) => uploadText(event.target.files?.[0])} />
+              </label>
+              <button className="secondary-button" onClick={() => setShowNewBook((value) => !value)}>
+                <Plus size={18} />
+                <span>Новая</span>
+              </button>
+            </div>
           </div>
 
           {showNewBook && (
@@ -1699,7 +1728,14 @@ function ReaderView({
 
           <div className="book-list">
             {books.map((book) => (
-              <button className={`book-item ${book.id === activeBook?.id ? "is-active" : ""} ${book.completedAt ? "is-complete" : ""}`} key={book.id} onClick={() => onSelectBook(book.id)}>
+              <button
+                className={`book-item ${book.id === activeBook?.id ? "is-active" : ""} ${book.completedAt ? "is-complete" : ""}`}
+                key={book.id}
+                onClick={() => {
+                  onSelectBook(book.id);
+                  setShowLibrary(false);
+                }}
+              >
                 <span>{book.title}</span>
                 <strong className="tabular">{book.completedAt ? "завершена" : `${readingProgress(book)}%`}</strong>
               </button>
@@ -1753,7 +1789,7 @@ function ReaderView({
               <input value={activeBook.title} onChange={(event) => onUpdateBook(activeBook.id, { title: event.target.value })} />
             </label>
             <div className="book-actions">
-              <StatPill icon={<BookOpen />} label="Прогресс" value={`${readingProgress(activeBook)}%`} />
+              <span className="reader-progress-pill tabular">{readingProgress(activeBook)}%</span>
               <button className="secondary-button" onClick={jumpToSaved}>
                 <ArrowRight size={18} />
                 <span>К месту</span>
@@ -2209,6 +2245,10 @@ function SettingsView({
   trainerCount,
   dueCards,
   dueTrainerItems,
+  session,
+  syncStatus,
+  syncMessage,
+  onSignedOut,
   onClearTrainer,
 }: {
   themeCopy: LearningCopy;
@@ -2219,6 +2259,10 @@ function SettingsView({
   trainerCount: number;
   dueCards: number;
   dueTrainerItems: number;
+  session: Session | null;
+  syncStatus: SyncStatus;
+  syncMessage: string;
+  onSignedOut: () => void;
   onClearTrainer: () => void;
 }) {
   const clearTrainer = () => {
@@ -2276,6 +2320,11 @@ function SettingsView({
             ))}
           </div>
           <p className="muted">{THEME_OPTIONS[profile.theme].hint}</p>
+        </div>
+
+        <div className="settings-card">
+          <h4>Синхронизация</h4>
+          <SyncPanel session={session} syncStatus={syncStatus} syncMessage={syncMessage} onSignedOut={onSignedOut} />
         </div>
 
         <div className="settings-card">
