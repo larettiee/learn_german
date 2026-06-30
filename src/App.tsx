@@ -627,6 +627,7 @@ export function App() {
   const [authChecked, setAuthChecked] = useState(!isSupabaseConfigured);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(isSupabaseConfigured ? "loading" : "local");
   const [syncMessage, setSyncMessage] = useState("");
+  const [lastReviewedCard, setLastReviewedCard] = useState<Card | null>(null);
   const hasLoadedCloud = useRef(false);
 
   const didNormalizeSchedules = useRef(false);
@@ -827,8 +828,16 @@ export function App() {
   };
 
   const reviewCard = (id: string, grade: ReviewGrade) => {
+    const previous = cards.find((card) => card.id === id) ?? null;
+    if (previous) setLastReviewedCard(previous);
     setCards((current) => current.map((card) => (card.id === id ? updateCardAfterReview(card, grade) : card)));
     markStudiedToday();
+  };
+
+  const undoLastReview = () => {
+    if (!lastReviewedCard) return;
+    setCards((current) => current.map((card) => (card.id === lastReviewedCard.id ? lastReviewedCard : card)));
+    setLastReviewedCard(null);
   };
 
   const updateCard = (id: string, patch: Partial<Pick<Card, "russian" | "german" | "plural" | "grammar" | "example" | "association">>) => {
@@ -993,7 +1002,7 @@ export function App() {
       </aside>
 
       <main className={`main-panel ${tab === "review" ? "is-review-mode" : ""} ${tab === "reader" ? "is-reader-mode" : ""}`}>
-        {(tab === "review" || tab === "add") && (
+        {tab === "review" && (
           <Header
             due={dueCards.length}
             difficult={difficultCards}
@@ -1004,7 +1013,7 @@ export function App() {
           />
         )}
 
-        {tab === "review" && <ReviewView themeCopy={themeCopy} cards={dueCards} allCards={activeCards} onReview={reviewCard} onAdd={() => setTab("add")} />}
+        {tab === "review" && <ReviewView themeCopy={themeCopy} cards={dueCards} allCards={activeCards} onReview={reviewCard} onUndo={undoLastReview} canUndo={Boolean(lastReviewedCard)} onAdd={() => setTab("add")} />}
         {tab === "reader" && (
           <ReaderView
             theme={theme}
@@ -1027,7 +1036,6 @@ export function App() {
             items={activeTrainerItems}
             totalCount={activeTrainerPool.length}
             dueCount={dueTrainerItems.length}
-            batchSize={TRAINER_BATCH_SIZE}
             correctCount={trainerCorrect}
             attemptsCount={trainerAttempts}
             onImport={importTrainerItems}
@@ -1309,12 +1317,16 @@ function ReviewView({
   cards,
   allCards,
   onReview,
+  onUndo,
+  canUndo,
   onAdd,
 }: {
   themeCopy: LearningCopy;
   cards: Card[];
   allCards: Card[];
   onReview: (id: string, grade: ReviewGrade) => void;
+  onUndo: () => void;
+  canUndo: boolean;
   onAdd: () => void;
 }) {
   const [revealed, setRevealed] = useState(false);
@@ -1532,6 +1544,10 @@ function ReviewView({
           <span>Знаю</span>
         </button>
       </div>
+      <button className="review-undo-button" onClick={onUndo} disabled={!canUndo} aria-label="Вернуть предыдущую карточку">
+        <ArrowRight className="is-back" size={18} />
+        <span>Назад</span>
+      </button>
     </section>
   );
 }
@@ -2094,7 +2110,6 @@ function TrainerView({
   items,
   totalCount,
   dueCount,
-  batchSize,
   correctCount,
   attemptsCount,
   onImport,
@@ -2104,7 +2119,6 @@ function TrainerView({
   items: TrainerItem[];
   totalCount: number;
   dueCount: number;
-  batchSize: number;
   correctCount: number;
   attemptsCount: number;
   onImport: (items: Array<Pick<TrainerItem, "russian" | "german">>) => void;
@@ -2120,6 +2134,7 @@ function TrainerView({
   const parsedCount = parseTrainerImport(importText).length;
   const isMatch = current ? normalizeAnswer(answer) === normalizeAnswer(current.german) : false;
   const trainerAccuracy = accuracy(correctCount, attemptsCount);
+  const completionPercent = totalCount ? Math.round(((totalCount - dueCount) / totalCount) * 100) : 0;
 
   useEffect(() => {
     if (currentIndex >= items.length) {
@@ -2150,7 +2165,7 @@ function TrainerView({
           <p className="eyebrow">{themeCopy.trainerEyebrow}</p>
           <h3>{themeCopy.trainerTitle}</h3>
         </div>
-        <button className="secondary-button" onClick={() => setShowImport((value) => !value)}>
+        <button className="secondary-button trainer-import-toggle" onClick={() => setShowImport((value) => !value)} aria-label="Импорт предложений">
           <Import size={18} />
           <span>Импорт</span>
         </button>
@@ -2158,8 +2173,7 @@ function TrainerView({
 
       <div className="trainer-stats-strip">
         <StatPill icon={<ClipboardList />} label="Правильно" value={`${trainerAccuracy}%`} />
-        <StatPill icon={<Check />} label="Ответы" value={`${correctCount}/${attemptsCount}`} />
-        <StatPill icon={<Dumbbell />} label="Предложения" value={`${totalCount}`} />
+        <StatPill icon={<Check />} label="Выполнено" value={`${completionPercent}%`} />
       </div>
 
       {showImport && (
@@ -2195,14 +2209,8 @@ function TrainerView({
         <div className="trainer-grid">
           <div className="trainer-card">
             <div className="card-meta">
-              <span className="tabular">{currentIndex + 1}/{items.length}</span>
               <span className="tabular">{accuracy(current.correct, current.attempts)}%</span>
-            </div>
-            <div className="batch-strip">
-              <span>Пачка</span>
-              <strong className="tabular">{items.length} из {dueCount}</strong>
-              <small>работаем по {batchSize}</small>
-              <small className="tabular">серия {(current.streak ?? 0)}/{TRAINER_MASTERY_STREAK}</small>
+              <span className="tabular">серия {(current.streak ?? 0)}/{TRAINER_MASTERY_STREAK}</span>
             </div>
             <p className="prompt-label">{themeCopy.trainerPrompt}</p>
             <h3>{current.russian}</h3>

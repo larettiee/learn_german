@@ -1487,6 +1487,36 @@ body[data-theme="viper"] .word-row::before {
   gap: 10px;
 }
 
+.review-undo-button {
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  border: 0;
+  padding: 0 12px;
+  color: var(--muted);
+  background: transparent;
+  border-radius: 999px;
+  font-weight: 850;
+  transition-property: transform, color, background-color;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.review-undo-button:not(:disabled):hover {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--surface-2) 74%, transparent);
+}
+
+.review-undo-button:active {
+  transform: scale(0.96);
+}
+
+.review-undo-button:disabled {
+  opacity: 0.34;
+}
+
 .grade-button {
   box-shadow: var(--shadow-border);
 }
@@ -2060,7 +2090,7 @@ body[data-theme="viper"] textarea {
 
 .trainer-stats-strip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -2079,7 +2109,7 @@ body[data-theme="viper"] textarea {
 }
 
 .trainer-card textarea {
-  min-height: 150px;
+  min-height: 118px;
   font-size: 1.05rem;
 }
 
@@ -2450,9 +2480,15 @@ body[data-theme="viper"] textarea {
   }
 
   .main-panel.is-review-mode {
-    gap: 8px;
+    gap: 0;
     min-height: 100dvh;
-    padding: 8px 12px 96px;
+    max-height: 100dvh;
+    padding: 6px 10px 90px;
+    overflow: hidden;
+  }
+
+  .main-panel.is-review-mode .top-band {
+    display: none;
   }
 
   .main-panel.is-review-mode .top-band,
@@ -2464,7 +2500,6 @@ body[data-theme="viper"] textarea {
   }
 
   .main-panel.is-review-mode .top-band {
-    display: grid;
     grid-template-columns: 1fr 44px;
     align-items: center;
     gap: 10px;
@@ -2747,13 +2782,15 @@ body[data-theme="viper"] textarea {
   }
 
   .main-panel.is-review-mode .review-layout {
-    gap: 8px;
+    gap: 6px;
     min-height: 0;
+    max-height: calc(100dvh - 96px);
+    overflow: hidden;
   }
 
   .main-panel.is-review-mode .flip-inner,
   .main-panel.is-review-mode .card-face {
-    min-height: min(58dvh, 430px);
+    min-height: min(66dvh, 520px);
   }
 
   .main-panel.is-review-mode .card-face {
@@ -2762,9 +2799,77 @@ body[data-theme="viper"] textarea {
   }
 
   .main-panel.is-review-mode .grade-grid {
-    position: sticky;
-    bottom: 90px;
-    z-index: 4;
+    position: static;
+  }
+
+  .main-panel.is-review-mode .review-undo-button {
+    min-height: 34px;
+    font-size: 0.78rem;
+  }
+
+  .trainer-section {
+    gap: 10px;
+  }
+
+  .trainer-section .section-toolbar {
+    display: grid;
+    grid-template-columns: 1fr 44px;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .trainer-section .section-toolbar h3 {
+    font-size: 1.05rem;
+    line-height: 1.1;
+  }
+
+  .trainer-section .section-toolbar .eyebrow {
+    font-size: 0.66rem;
+  }
+
+  .trainer-import-toggle {
+    width: 44px;
+    min-width: 44px;
+    min-height: 40px;
+    padding: 0;
+  }
+
+  .trainer-import-toggle span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .trainer-stats-strip {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .trainer-card,
+  .trainer-result,
+  .import-panel {
+    padding: 14px;
+  }
+
+  .trainer-card {
+    gap: 10px;
+  }
+
+  .trainer-card h3 {
+    font-size: clamp(1.3rem, 7vw, 2rem);
+    line-height: 1.12;
+  }
+
+  .trainer-card textarea {
+    min-height: 88px;
+    max-height: 112px;
+  }
+
+  .trainer-result {
+    gap: 10px;
   }
 
   .table-head {
@@ -2954,6 +3059,24 @@ body[data-theme="viper"] textarea {
   body[data-theme="viper"] .review-card h3,
   body[data-theme="viper"] .trainer-card h3 {
     font-size: clamp(2.35rem, 13vw, 4rem);
+  }
+
+  .trainer-card,
+  body[data-theme="sekta"] .trainer-card,
+  body[data-theme="viper"] .trainer-card {
+    min-height: 0;
+  }
+
+  .trainer-card h3,
+  body[data-theme="sekta"] .trainer-card h3,
+  body[data-theme="viper"] .trainer-card h3 {
+    font-size: clamp(1.3rem, 7vw, 2rem);
+    line-height: 1.12;
+  }
+
+  .trainer-card textarea {
+    min-height: 84px;
+    max-height: 108px;
   }
 
   .answer-word {
