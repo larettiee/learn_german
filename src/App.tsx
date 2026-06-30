@@ -522,6 +522,30 @@ async function lookupEnglishHint(word: string) {
   }
 }
 
+async function translateReaderWord(word: string, from: "de" | "en", to: "ru" | "de" | "en") {
+  if (from === to) return word;
+  const params = new URLSearchParams({
+    q: word,
+    langpair: `${from}|${to}`,
+  });
+
+  try {
+    const response = await fetch(`https://api.mymemory.translated.net/get?${params.toString()}`);
+    if (!response.ok) return "";
+    const payload = await response.json() as {
+      responseData?: { translatedText?: string };
+      matches?: Array<{ translation?: string; match?: number }>;
+    };
+    const direct = payload.responseData?.translatedText?.trim();
+    const bestMatch = payload.matches
+      ?.filter((match) => match.translation?.trim())
+      .sort((first, second) => (second.match ?? 0) - (first.match ?? 0))[0]?.translation?.trim();
+    return direct && direct.toLocaleLowerCase() !== word.toLocaleLowerCase() ? direct : bestMatch ?? "";
+  } catch {
+    return "";
+  }
+}
+
 function updateCardAfterReview(card: Card, grade: ReviewGrade): Card {
   const wasCorrect = grade !== "again";
   const currentStep = completedReviewStep(card);
@@ -1584,6 +1608,7 @@ function ReaderView({
   const [showLibrary, setShowLibrary] = useState(!books.length);
   const [targetWord, setTargetWord] = useState("");
   const [translation, setTranslation] = useState("");
+  const [lookupTranslations, setLookupTranslations] = useState<{ russian?: string; german?: string; english?: string }>({});
   const [grammar, setGrammar] = useState("");
   const [lookupStatus, setLookupStatus] = useState<"idle" | "loading" | "done">("idle");
   const [saved, setSaved] = useState("");
@@ -1601,21 +1626,40 @@ function ReaderView({
 
     setTargetWord(selected.word);
     setTranslation("");
+    setLookupTranslations({});
     setGrammar("");
     setSaved("");
     setLookupStatus("loading");
 
     if (language === "german") {
-      lookupGermanArticle(selected.word).then((article) => {
+      Promise.all([
+        lookupGermanArticle(selected.word),
+        translateReaderWord(selected.word, "de", "ru"),
+        translateReaderWord(selected.word, "de", "en"),
+      ]).then(([article, russianHint, englishHint]) => {
         if (cancelled) return;
         setTargetWord(article ? `${article} ${selected.word}` : selected.word);
-        setGrammar(article ? `Артикль найден автоматически: ${article}` : "");
+        setTranslation(russianHint);
+        setLookupTranslations({ russian: russianHint, german: article ? `${article} ${selected.word}` : selected.word, english: englishHint });
+        setGrammar([
+          article ? `Артикль найден автоматически: ${article}` : "",
+          englishHint ? `Английский: ${englishHint}` : "",
+        ].filter(Boolean).join("\n"));
         setLookupStatus("done");
       });
     } else {
-      lookupEnglishHint(selected.word).then((hint) => {
+      Promise.all([
+        lookupEnglishHint(selected.word),
+        translateReaderWord(selected.word, "en", "ru"),
+        translateReaderWord(selected.word, "en", "de"),
+      ]).then(([hint, russianHint, germanHint]) => {
         if (cancelled) return;
-        setGrammar(hint);
+        setTranslation(russianHint);
+        setLookupTranslations({ russian: russianHint, english: selected.word, german: germanHint });
+        setGrammar([
+          germanHint ? `Немецкий: ${germanHint}` : "",
+          hint,
+        ].filter(Boolean).join("\n"));
         setLookupStatus("done");
       });
     }
@@ -1644,15 +1688,24 @@ function ReaderView({
   }, [books.length]);
 
   const selectWord = (word: string, tokenStart: number) => {
-    const cleaned = cleanReaderWord(word);
+    let cleaned = cleanReaderWord(word);
+    let selectedStart = tokenStart;
+    if (language === "german" && /^(der|die|das)$/i.test(cleaned)) {
+      const afterArticle = text.slice(tokenStart + word.length);
+      const nextWord = afterArticle.match(/^[^\p{L}\p{M}]*([\p{L}\p{M}]+)/u);
+      if (nextWord?.[1]) {
+        cleaned = cleanReaderWord(nextWord[1]);
+        selectedStart = tokenStart + word.length + (nextWord.index ?? 0) + nextWord[0].indexOf(nextWord[1]);
+      }
+    }
     if (!cleaned) return;
     if (activeBook) {
-      onUpdateBook(activeBook.id, { position: tokenStart });
+      onUpdateBook(activeBook.id, { position: selectedStart });
     }
     setSelected({
       word: cleaned,
-      context: sentenceContext(text, cleaned, tokenStart),
-      offset: tokenStart,
+      context: sentenceContext(text, cleaned, selectedStart),
+      offset: selectedStart,
     });
   };
 
@@ -1802,6 +1855,28 @@ function ReaderView({
                 <input value={translation} onChange={(event) => setTranslation(event.target.value)} placeholder="впиши перевод перед сохранением" />
               </label>
             </div>
+            {(lookupTranslations.russian || lookupTranslations.german || lookupTranslations.english) && (
+              <div className="lookup-translation-grid" aria-label="Автоперевод">
+                {lookupTranslations.russian && (
+                  <div>
+                    <span>RU</span>
+                    <strong>{lookupTranslations.russian}</strong>
+                  </div>
+                )}
+                {lookupTranslations.german && (
+                  <div>
+                    <span>DE</span>
+                    <strong>{lookupTranslations.german}</strong>
+                  </div>
+                )}
+                {lookupTranslations.english && (
+                  <div>
+                    <span>EN</span>
+                    <strong>{lookupTranslations.english}</strong>
+                  </div>
+                )}
+              </div>
+            )}
             <label>
               <span>Контекст</span>
               <textarea value={selected.context} readOnly />
