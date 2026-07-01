@@ -2049,11 +2049,17 @@ textarea:focus {
 
 .is-paged-reader .reader-text {
   display: block;
-  min-height: min(58dvh, 540px);
-  max-height: min(58dvh, 540px);
-  padding: 22px 22px 120px;
-  overflow: hidden;
+  min-height: calc(100dvh - 156px);
+  max-height: none;
+  padding: 24px 22px 136px;
+  overflow: visible;
   text-wrap: pretty;
+}
+
+.is-paged-reader .reader-page-controls {
+  position: sticky;
+  top: 8px;
+  z-index: 12;
 }
 
 .reader-word {
@@ -2109,7 +2115,7 @@ body[data-theme="sekta"] .reader-text {
 }
 
 body[data-theme="sekta"] .is-paged-reader .reader-text {
-  overflow: hidden;
+  overflow: visible;
 }
 
 body[data-theme="sekta"] .reader-lookup {
@@ -2779,6 +2785,20 @@ body[data-theme="viper"] textarea {
     white-space: nowrap;
   }
 
+  .is-paged-reader .section-toolbar {
+    display: none;
+  }
+
+  .is-paged-reader .reader-layout {
+    gap: 6px;
+  }
+
+  .is-paged-reader .reader-page-controls {
+    top: 6px;
+    margin: 0 2px;
+    backdrop-filter: blur(14px);
+  }
+
   .reader-menu-button {
     min-width: 44px;
     min-height: 40px;
@@ -2871,10 +2891,10 @@ body[data-theme="viper"] textarea {
   }
 
   .is-paged-reader .reader-text {
-    min-height: 52dvh;
-    max-height: 52dvh;
-    padding: 16px 16px 112px;
-    overflow: hidden;
+    min-height: calc(100dvh - 124px);
+    max-height: none;
+    padding: 18px 16px 136px;
+    overflow: visible;
     -webkit-overflow-scrolling: auto;
   }
 
@@ -3211,9 +3231,9 @@ body[data-theme="viper"] textarea {
   }
 
   .is-paged-reader .reader-text {
-    min-height: 52dvh;
-    max-height: 52dvh;
-    padding: 16px 16px 112px;
+    min-height: calc(100dvh - 124px);
+    max-height: none;
+    padding: 18px 16px 136px;
   }
 
   .review-card {
