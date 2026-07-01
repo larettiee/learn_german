@@ -1,4 +1,4 @@
-const CACHE_NAME = "language-trainer-v2";
+const CACHE_NAME = "language-trainer-v3";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/apple-touch-icon.png"];
 
 self.addEventListener("install", (event) => {

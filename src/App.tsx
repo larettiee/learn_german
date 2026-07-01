@@ -115,7 +115,6 @@ const REVIEW_INTERVALS = [1 / 24, 3 / 24, 12 / 24, 1, 3, 7, 14, 30];
 const LEARNING_PHASE_STEPS = 4;
 const TRAINER_BATCH_SIZE = 10;
 const TRAINER_MASTERY_STREAK = 3;
-const READER_PAGE_CHARS = 3200;
 const DICTIONARY_PAGE_SIZE = 80;
 
 const LANGUAGE_COPY: Record<
@@ -421,26 +420,6 @@ function GermanTerm({ value, className = "" }: { value: string; className?: stri
 
 function tokenizeText(text: string) {
   return text.match(/[\p{L}\p{M}]+(?:[-'][\p{L}\p{M}]+)*|[^\p{L}\p{M}]+/gu) ?? [];
-}
-
-function readerPageStartFor(text: string, position: number) {
-  if (text.length <= READER_PAGE_CHARS) return 0;
-  const safePosition = Math.max(0, Math.min(position, text.length - 1));
-  return Math.max(0, Math.min(safePosition, text.length - 1));
-}
-
-function readerPageFor(text: string, start: number) {
-  const pageStart = readerPageStartFor(text, start);
-  let pageEnd = Math.min(text.length, pageStart + READER_PAGE_CHARS);
-  if (pageEnd < text.length) {
-    const softBreak = Math.max(text.lastIndexOf("\n", pageEnd), text.lastIndexOf(". ", pageEnd), text.lastIndexOf("! ", pageEnd), text.lastIndexOf("? ", pageEnd));
-    if (softBreak > pageStart + READER_PAGE_CHARS * 0.55) pageEnd = softBreak + 1;
-  }
-  return {
-    end: pageEnd,
-    start: pageStart,
-    text: text.slice(pageStart, pageEnd),
-  };
 }
 
 function isWordToken(token: string) {
@@ -1637,7 +1616,8 @@ function ReaderView({
   const [grammar, setGrammar] = useState("");
   const [lookupStatus, setLookupStatus] = useState<"idle" | "loading" | "done">("idle");
   const [saved, setSaved] = useState("");
-  const [pageStart, setPageStart] = useState(0);
+  const readerTextRef = useRef<HTMLDivElement | null>(null);
+  const scrollFrameRef = useRef<number | null>(null);
   const activeBook = books.find((book) => book.id === activeBookId) ?? books[0];
   const text = activeBook?.text ?? "";
   const page = useMemo(() => ({ end: text.length, start: 0, text }), [text]);
@@ -1695,13 +1675,18 @@ function ReaderView({
   useEffect(() => {
     setSelected(null);
     setSaved("");
-    setPageStart(activeBook ? readerPageStartFor(activeBook.text, activeBook.position) : 0);
-  }, [activeBookId]);
+    window.requestAnimationFrame(() => {
+      const reader = readerTextRef.current;
+      if (!reader || !activeBook?.text.length) return;
+      const maxScroll = Math.max(reader.scrollHeight - reader.clientHeight, 0);
+      const safePosition = clampBookPosition(activeBook);
+      reader.scrollTop = maxScroll ? (safePosition / Math.max(activeBook.text.length - 1, 1)) * maxScroll : 0;
+    });
+  }, [activeBookId, activeBook?.text.length]);
 
-  useEffect(() => {
-    if (!activeBook) return;
-    setPageStart((current) => readerPageStartFor(activeBook.text, Math.min(current, Math.max(activeBook.text.length - 1, 0))));
-  }, [activeBook?.id, activeBook?.text.length]);
+  useEffect(() => () => {
+    if (scrollFrameRef.current) window.cancelAnimationFrame(scrollFrameRef.current);
+  }, []);
 
   useEffect(() => {
     if (!books.length) {
@@ -1795,23 +1780,30 @@ function ReaderView({
 
   const jumpToSaved = () => {
     if (!activeBook) return;
-    setPageStart(readerPageStartFor(activeBook.text, clampBookPosition(activeBook)));
-    document.querySelector(".reader-text")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const reader = readerTextRef.current;
+    if (!reader) return;
+    const maxScroll = Math.max(reader.scrollHeight - reader.clientHeight, 0);
+    const safePosition = clampBookPosition(activeBook);
+    reader.scrollTo({
+      top: maxScroll ? (safePosition / Math.max(activeBook.text.length - 1, 1)) * maxScroll : 0,
+      behavior: "smooth",
+    });
   };
 
-  const goToPreviousPage = () => {
-    if (!activeBook) return;
-    const nextStart = Math.max(0, page.start - READER_PAGE_CHARS);
-    const normalizedStart = readerPageStartFor(activeBook.text, nextStart);
-    setPageStart(normalizedStart);
-    onUpdateBook(activeBook.id, { position: normalizedStart });
-  };
-
-  const goToNextPage = () => {
-    if (!activeBook) return;
-    const normalizedStart = readerPageStartFor(activeBook.text, page.end);
-    setPageStart(normalizedStart);
-    onUpdateBook(activeBook.id, { position: normalizedStart });
+  const handleReaderScroll = () => {
+    if (!activeBook || !activeBook.text.length || scrollFrameRef.current) return;
+    scrollFrameRef.current = window.requestAnimationFrame(() => {
+      scrollFrameRef.current = null;
+      const reader = readerTextRef.current;
+      if (!reader) return;
+      const maxScroll = Math.max(reader.scrollHeight - reader.clientHeight, 0);
+      const nextPosition = maxScroll
+        ? Math.round((reader.scrollTop / maxScroll) * Math.max(activeBook.text.length - 1, 0))
+        : 0;
+      if (Math.abs(nextPosition - clampBookPosition(activeBook)) > 80) {
+        onUpdateBook(activeBook.id, { position: nextPosition });
+      }
+    });
   };
 
   let cursor = page.start;
@@ -1986,7 +1978,7 @@ function ReaderView({
           </div>
         )}
 
-        <div className="reader-text" aria-label="Текст для чтения">
+        <div className="reader-text" aria-label="Текст для чтения" ref={readerTextRef} onScroll={handleReaderScroll}>
           {!activeBook ? (
             <div className="empty-state compact">
               <FileText size={28} />
