@@ -1914,6 +1914,30 @@ textarea:focus {
   font-weight: 900;
 }
 
+.reader-page-controls {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) 44px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel-bg) 86%, transparent);
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.48),
+    0 0 0 1px rgba(4, 28, 36, 0.07);
+  font-size: 0.8rem;
+  font-weight: 850;
+  text-align: center;
+}
+
+.reader-page-controls .secondary-button {
+  width: 44px;
+  min-width: 44px;
+  min-height: 40px;
+  padding: 0;
+}
+
 .is-back {
   transform: rotate(180deg);
 }
@@ -2023,6 +2047,15 @@ textarea:focus {
   white-space: pre-wrap;
 }
 
+.is-paged-reader .reader-text {
+  display: block;
+  min-height: min(58dvh, 540px);
+  max-height: min(58dvh, 540px);
+  padding: 22px 22px 104px;
+  overflow: hidden;
+  text-wrap: pretty;
+}
+
 .reader-word {
   min-height: 0;
   border: 0;
@@ -2073,6 +2106,10 @@ body[data-theme="sekta"] .reader-text {
 body[data-theme="sekta"] .reader-text {
   overflow-x: hidden;
   overflow-y: auto;
+}
+
+body[data-theme="sekta"] .is-paged-reader .reader-text {
+  overflow: hidden;
 }
 
 body[data-theme="sekta"] .reader-lookup {
@@ -2833,6 +2870,14 @@ body[data-theme="viper"] textarea {
     -webkit-overflow-scrolling: touch;
   }
 
+  .is-paged-reader .reader-text {
+    min-height: 54dvh;
+    max-height: 54dvh;
+    padding: 16px 16px 92px;
+    overflow: hidden;
+    -webkit-overflow-scrolling: auto;
+  }
+
   .reader-lookup {
     --lookup-edge: 0px;
     position: fixed;
@@ -3163,6 +3208,12 @@ body[data-theme="viper"] textarea {
     border-radius: 16px;
     font-size: 1.03rem;
     line-height: 1.78;
+  }
+
+  .is-paged-reader .reader-text {
+    min-height: 54dvh;
+    max-height: 54dvh;
+    padding: 16px 16px 92px;
   }
 
   .review-card {

@@ -115,6 +115,7 @@ const REVIEW_INTERVALS = [1 / 24, 3 / 24, 12 / 24, 1, 3, 7, 14, 30];
 const LEARNING_PHASE_STEPS = 4;
 const TRAINER_BATCH_SIZE = 10;
 const TRAINER_MASTERY_STREAK = 3;
+const READER_PAGE_CHARS = 900;
 const DICTIONARY_PAGE_SIZE = 80;
 
 const LANGUAGE_COPY: Record<
@@ -420,6 +421,28 @@ function GermanTerm({ value, className = "" }: { value: string; className?: stri
 
 function tokenizeText(text: string) {
   return text.match(/[\p{L}\p{M}]+(?:[-'][\p{L}\p{M}]+)*|[^\p{L}\p{M}]+/gu) ?? [];
+}
+
+function readerPageStartFor(text: string, position: number) {
+  if (text.length <= READER_PAGE_CHARS) return 0;
+  const safePosition = Math.max(0, Math.min(position, text.length - 1));
+  const paragraphStart = text.lastIndexOf("\n", safePosition);
+  const sentenceStart = Math.max(text.lastIndexOf(". ", safePosition), text.lastIndexOf("! ", safePosition), text.lastIndexOf("? ", safePosition));
+  return Math.max(0, paragraphStart, sentenceStart > 0 ? sentenceStart + 2 : 0);
+}
+
+function readerPageFor(text: string, start: number) {
+  const pageStart = readerPageStartFor(text, start);
+  let pageEnd = Math.min(text.length, pageStart + READER_PAGE_CHARS);
+  if (pageEnd < text.length) {
+    const softBreak = Math.max(text.lastIndexOf("\n", pageEnd), text.lastIndexOf(". ", pageEnd), text.lastIndexOf("! ", pageEnd), text.lastIndexOf("? ", pageEnd));
+    if (softBreak > pageStart + READER_PAGE_CHARS * 0.58) pageEnd = softBreak + 1;
+  }
+  return {
+    end: pageEnd,
+    start: pageStart,
+    text: text.slice(pageStart, pageEnd),
+  };
 }
 
 function isWordToken(token: string) {
@@ -1042,6 +1065,7 @@ export function App() {
             theme={theme}
             themeCopy={themeCopy}
             language={normalizedProfile.language}
+            email={session?.user.email ?? ""}
             books={activeReaderBooks}
             activeBookId={activeBookId}
             onSelectBook={setActiveBookId}
@@ -1581,6 +1605,7 @@ function ReaderView({
   theme,
   themeCopy,
   language,
+  email,
   books,
   activeBookId,
   onSelectBook,
@@ -1592,6 +1617,7 @@ function ReaderView({
   theme: Theme;
   themeCopy: LearningCopy;
   language: StudyLanguage;
+  email: string;
   books: ReaderBook[];
   activeBookId: string;
   onSelectBook: (id: string) => void;
@@ -1620,8 +1646,12 @@ function ReaderView({
   const scrollFrameRef = useRef<number | null>(null);
   const activeBook = books.find((book) => book.id === activeBookId) ?? books[0];
   const text = activeBook?.text ?? "";
-  const page = useMemo(() => ({ end: text.length, start: 0, text }), [text]);
+  const usesPagedReader = language === "german" && email.toLocaleLowerCase() === "tushinavaleria@yandex.ru";
+  const [pageStart, setPageStart] = useState(0);
+  const page = useMemo(() => usesPagedReader ? readerPageFor(text, pageStart) : { end: text.length, start: 0, text }, [pageStart, text, usesPagedReader]);
   const tokens = useMemo(() => tokenizeText(page.text), [page.text]);
+  const hasPreviousPage = usesPagedReader && page.start > 0;
+  const hasNextPage = usesPagedReader && page.end < text.length;
 
   useEffect(() => {
     if (!selected) return;
@@ -1675,6 +1705,10 @@ function ReaderView({
   useEffect(() => {
     setSelected(null);
     setSaved("");
+    if (usesPagedReader) {
+      setPageStart(activeBook ? readerPageStartFor(activeBook.text, clampBookPosition(activeBook)) : 0);
+      return;
+    }
     window.requestAnimationFrame(() => {
       const reader = readerTextRef.current;
       if (!reader || !activeBook?.text.length) return;
@@ -1682,7 +1716,7 @@ function ReaderView({
       const safePosition = clampBookPosition(activeBook);
       reader.scrollTop = maxScroll ? (safePosition / Math.max(activeBook.text.length - 1, 1)) * maxScroll : 0;
     });
-  }, [activeBookId, activeBook?.text.length]);
+  }, [activeBookId, activeBook?.text.length, usesPagedReader]);
 
   useEffect(() => () => {
     if (scrollFrameRef.current) window.cancelAnimationFrame(scrollFrameRef.current);
@@ -1780,6 +1814,10 @@ function ReaderView({
 
   const jumpToSaved = () => {
     if (!activeBook) return;
+    if (usesPagedReader) {
+      setPageStart(readerPageStartFor(activeBook.text, clampBookPosition(activeBook)));
+      return;
+    }
     const reader = readerTextRef.current;
     if (!reader) return;
     const maxScroll = Math.max(reader.scrollHeight - reader.clientHeight, 0);
@@ -1791,7 +1829,7 @@ function ReaderView({
   };
 
   const handleReaderScroll = () => {
-    if (!activeBook || !activeBook.text.length || scrollFrameRef.current) return;
+    if (usesPagedReader || !activeBook || !activeBook.text.length || scrollFrameRef.current) return;
     scrollFrameRef.current = window.requestAnimationFrame(() => {
       scrollFrameRef.current = null;
       const reader = readerTextRef.current;
@@ -1806,10 +1844,24 @@ function ReaderView({
     });
   };
 
+  const goToPreviousPage = () => {
+    if (!activeBook) return;
+    const normalizedStart = readerPageStartFor(activeBook.text, Math.max(0, page.start - READER_PAGE_CHARS * 0.9));
+    setPageStart(normalizedStart);
+    onUpdateBook(activeBook.id, { position: normalizedStart });
+  };
+
+  const goToNextPage = () => {
+    if (!activeBook) return;
+    const normalizedStart = readerPageStartFor(activeBook.text, page.end);
+    setPageStart(normalizedStart);
+    onUpdateBook(activeBook.id, { position: normalizedStart });
+  };
+
   let cursor = page.start;
 
   return (
-    <section className="reader-section">
+    <section className={`reader-section ${usesPagedReader ? "is-paged-reader" : ""}`}>
       <div className="section-toolbar">
         <div>
           <p className="eyebrow">{language === "german" ? "Lesezimmer" : "Reading Room"}</p>
@@ -1975,6 +2027,18 @@ function ReaderView({
                 <span>Удалить книгу</span>
               </button>
             </div>
+          </div>
+        )}
+
+        {activeBook && usesPagedReader && (
+          <div className="reader-page-controls">
+            <button className="secondary-button" onClick={goToPreviousPage} disabled={!hasPreviousPage} aria-label="Предыдущая страница">
+              <ArrowRight className="is-back" size={18} />
+            </button>
+            <span className="tabular">{Math.min(100, Math.round((page.end / Math.max(text.length, 1)) * 100))}% текста</span>
+            <button className="secondary-button" onClick={goToNextPage} disabled={!hasNextPage} aria-label="Следующая страница">
+              <ArrowRight size={18} />
+            </button>
           </div>
         )}
 
