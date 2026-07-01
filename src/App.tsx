@@ -115,7 +115,8 @@ const REVIEW_INTERVALS = [1 / 24, 3 / 24, 12 / 24, 1, 3, 7, 14, 30];
 const LEARNING_PHASE_STEPS = 4;
 const TRAINER_BATCH_SIZE = 10;
 const TRAINER_MASTERY_STREAK = 3;
-const READER_PAGE_CHARS = 900;
+const READER_PAGE_CHARS = 560;
+const READER_MIN_PAGE_CHARS = 340;
 const DICTIONARY_PAGE_SIZE = 80;
 
 const LANGUAGE_COPY: Record<
@@ -423,21 +424,47 @@ function tokenizeText(text: string) {
   return text.match(/[\p{L}\p{M}]+(?:[-'][\p{L}\p{M}]+)*|[^\p{L}\p{M}]+/gu) ?? [];
 }
 
+function readerPageEndFor(text: string, start: number) {
+  const pageStart = Math.max(0, Math.min(start, text.length));
+  let pageEnd = Math.min(text.length, pageStart + READER_PAGE_CHARS);
+  if (pageEnd < text.length) {
+    const newlineBreak = text.lastIndexOf("\n", pageEnd);
+    const sentenceBreak = Math.max(text.lastIndexOf(". ", pageEnd), text.lastIndexOf("! ", pageEnd), text.lastIndexOf("? ", pageEnd));
+    const softBreak = Math.max(newlineBreak, sentenceBreak);
+    if (softBreak > pageStart + READER_MIN_PAGE_CHARS) {
+      pageEnd = softBreak + (softBreak === newlineBreak ? 1 : 2);
+    }
+  }
+  return pageEnd;
+}
+
 function readerPageStartFor(text: string, position: number) {
-  if (text.length <= READER_PAGE_CHARS) return 0;
-  const safePosition = Math.max(0, Math.min(position, text.length - 1));
-  const paragraphStart = text.lastIndexOf("\n", safePosition);
-  const sentenceStart = Math.max(text.lastIndexOf(". ", safePosition), text.lastIndexOf("! ", safePosition), text.lastIndexOf("? ", safePosition));
-  return Math.max(0, paragraphStart, sentenceStart > 0 ? sentenceStart + 2 : 0);
+  const safePosition = Math.max(0, Math.min(position, Math.max(text.length - 1, 0)));
+  let pageStart = 0;
+  while (pageStart < text.length) {
+    const pageEnd = readerPageEndFor(text, pageStart);
+    if (safePosition < pageEnd || pageEnd >= text.length) return pageStart;
+    pageStart = pageEnd;
+  }
+  return 0;
+}
+
+function previousReaderPageStart(text: string, currentStart: number) {
+  const target = Math.max(0, currentStart);
+  let previousStart = 0;
+  let pageStart = 0;
+  while (pageStart < target) {
+    previousStart = pageStart;
+    const pageEnd = readerPageEndFor(text, pageStart);
+    if (pageEnd >= target || pageEnd <= pageStart) return previousStart;
+    pageStart = pageEnd;
+  }
+  return previousStart;
 }
 
 function readerPageFor(text: string, start: number) {
-  const pageStart = readerPageStartFor(text, start);
-  let pageEnd = Math.min(text.length, pageStart + READER_PAGE_CHARS);
-  if (pageEnd < text.length) {
-    const softBreak = Math.max(text.lastIndexOf("\n", pageEnd), text.lastIndexOf(". ", pageEnd), text.lastIndexOf("! ", pageEnd), text.lastIndexOf("? ", pageEnd));
-    if (softBreak > pageStart + READER_PAGE_CHARS * 0.58) pageEnd = softBreak + 1;
-  }
+  const pageStart = Math.max(0, Math.min(start, text.length));
+  const pageEnd = readerPageEndFor(text, pageStart);
   return {
     end: pageEnd,
     start: pageStart,
@@ -1847,14 +1874,14 @@ function ReaderView({
 
   const goToPreviousPage = () => {
     if (!activeBook) return;
-    const normalizedStart = readerPageStartFor(activeBook.text, Math.max(0, page.start - READER_PAGE_CHARS * 0.9));
+    const normalizedStart = previousReaderPageStart(activeBook.text, page.start);
     setPageStart(normalizedStart);
     onUpdateBook(activeBook.id, { position: normalizedStart });
   };
 
   const goToNextPage = () => {
     if (!activeBook) return;
-    const normalizedStart = readerPageStartFor(activeBook.text, page.end);
+    const normalizedStart = page.end;
     setPageStart(normalizedStart);
     onUpdateBook(activeBook.id, { position: normalizedStart });
   };

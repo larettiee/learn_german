@@ -2051,7 +2051,7 @@ textarea:focus {
   display: block;
   min-height: min(58dvh, 540px);
   max-height: min(58dvh, 540px);
-  padding: 22px 22px 104px;
+  padding: 22px 22px 120px;
   overflow: hidden;
   text-wrap: pretty;
 }
@@ -2871,9 +2871,9 @@ body[data-theme="viper"] textarea {
   }
 
   .is-paged-reader .reader-text {
-    min-height: 54dvh;
-    max-height: 54dvh;
-    padding: 16px 16px 92px;
+    min-height: 52dvh;
+    max-height: 52dvh;
+    padding: 16px 16px 112px;
     overflow: hidden;
     -webkit-overflow-scrolling: auto;
   }
@@ -3211,9 +3211,9 @@ body[data-theme="viper"] textarea {
   }
 
   .is-paged-reader .reader-text {
-    min-height: 54dvh;
-    max-height: 54dvh;
-    padding: 16px 16px 92px;
+    min-height: 52dvh;
+    max-height: 52dvh;
+    padding: 16px 16px 112px;
   }
 
   .review-card {
