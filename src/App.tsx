@@ -1643,7 +1643,7 @@ function ReaderView({
   const [lookupStatus, setLookupStatus] = useState<"idle" | "loading" | "done">("idle");
   const [saved, setSaved] = useState("");
   const readerTextRef = useRef<HTMLDivElement | null>(null);
-  const scrollFrameRef = useRef<number | null>(null);
+  const scrollSaveTimerRef = useRef<number | null>(null);
   const activeBook = books.find((book) => book.id === activeBookId) ?? books[0];
   const text = activeBook?.text ?? "";
   const usesPagedReader = language === "german" && email.toLocaleLowerCase() === "tushinavaleria@yandex.ru";
@@ -1719,7 +1719,7 @@ function ReaderView({
   }, [activeBookId, activeBook?.text.length, usesPagedReader]);
 
   useEffect(() => () => {
-    if (scrollFrameRef.current) window.cancelAnimationFrame(scrollFrameRef.current);
+    if (scrollSaveTimerRef.current) window.clearTimeout(scrollSaveTimerRef.current);
   }, []);
 
   useEffect(() => {
@@ -1829,9 +1829,10 @@ function ReaderView({
   };
 
   const handleReaderScroll = () => {
-    if (usesPagedReader || !activeBook || !activeBook.text.length || scrollFrameRef.current) return;
-    scrollFrameRef.current = window.requestAnimationFrame(() => {
-      scrollFrameRef.current = null;
+    if (usesPagedReader || !activeBook || !activeBook.text.length) return;
+    if (scrollSaveTimerRef.current) window.clearTimeout(scrollSaveTimerRef.current);
+    scrollSaveTimerRef.current = window.setTimeout(() => {
+      scrollSaveTimerRef.current = null;
       const reader = readerTextRef.current;
       if (!reader) return;
       const maxScroll = Math.max(reader.scrollHeight - reader.clientHeight, 0);
@@ -1841,7 +1842,7 @@ function ReaderView({
       if (Math.abs(nextPosition - clampBookPosition(activeBook)) > 80) {
         onUpdateBook(activeBook.id, { position: nextPosition });
       }
-    });
+    }, 520);
   };
 
   const goToPreviousPage = () => {
