@@ -668,6 +668,7 @@ button svg {
 .dictionary-section,
 .reader-section,
 .trainer-section,
+.article-trainer-section,
 .empty-state,
 .review-card,
 .trainer-card,
@@ -686,6 +687,7 @@ button svg {
 .dictionary-section,
 .reader-section,
 .trainer-section,
+.article-trainer-section,
 .settings-section,
 .empty-state {
   opacity: 0;
@@ -699,6 +701,7 @@ button svg {
 .dictionary-section,
 .reader-section,
 .trainer-section,
+.article-trainer-section,
 .settings-section,
 .empty-state {
   animation-delay: 90ms;
@@ -1337,61 +1340,6 @@ body[data-theme="viper"] .trainer-card h3 {
   color: var(--ink);
   font-size: 0.98rem;
   line-height: 1.45;
-}
-
-.article-check {
-  display: grid;
-  gap: 12px;
-  width: 100%;
-  padding: 16px;
-  background: color-mix(in srgb, var(--surface-2) 82%, transparent);
-  border-radius: 14px;
-  box-shadow: var(--shadow-border);
-}
-
-.article-options {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-}
-
-.article-choice {
-  min-height: 44px;
-  border: 0;
-  border-radius: 10px;
-  color: var(--ink);
-  background: var(--panel-bg);
-  box-shadow: var(--shadow-border);
-  font-size: 1rem;
-  font-weight: 900;
-  transition-property: transform, background-color, color, box-shadow;
-  transition-duration: 150ms;
-  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
-}
-
-.article-choice:active {
-  transform: scale(0.96);
-}
-
-.article-choice.is-selected {
-  box-shadow: var(--shadow-border-hover);
-}
-
-.article-choice.is-correct {
-  color: #1f664d;
-  background: #e3f4ec;
-}
-
-.article-result {
-  font-weight: 850;
-}
-
-.article-result.ok {
-  color: #1f664d;
-}
-
-.article-result.diff {
-  color: #8f2d22;
 }
 
 .match-indicator,
@@ -2296,6 +2244,134 @@ body[data-theme="viper"] textarea {
   color: var(--gold);
 }
 
+.article-trainer-section {
+  display: grid;
+  gap: 14px;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+.article-trainer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.article-practice-card {
+  display: grid;
+  align-content: center;
+  gap: 18px;
+  min-height: min(560px, calc(100dvh - 210px));
+  padding: 28px;
+  color: var(--ink);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(222, 235, 238, 0.8)),
+    var(--panel-bg);
+  border-radius: 18px;
+  box-shadow: var(--shadow-border), 0 24px 72px rgba(10, 28, 34, 0.18);
+  transition-property: background-color, box-shadow, transform;
+  transition-duration: 180ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.article-practice-card.is-correct {
+  background:
+    linear-gradient(135deg, rgba(225, 247, 236, 0.96), rgba(184, 224, 202, 0.86)),
+    var(--panel-bg);
+  box-shadow: var(--shadow-border), 0 24px 72px rgba(27, 104, 75, 0.22);
+}
+
+.article-practice-card.is-wrong {
+  background:
+    linear-gradient(135deg, rgba(255, 235, 231, 0.96), rgba(230, 191, 184, 0.84)),
+    var(--panel-bg);
+  box-shadow: var(--shadow-border), 0 24px 72px rgba(143, 45, 34, 0.22);
+}
+
+.article-practice-copy {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.article-practice-copy h3 {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-size: clamp(2.5rem, 9vw, 5.2rem);
+  line-height: 0.95;
+}
+
+.article-practice-copy p:last-child {
+  max-width: 540px;
+  color: var(--muted);
+  font-weight: 780;
+  line-height: 1.45;
+}
+
+.article-practice-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.article-practice-choice {
+  display: grid;
+  place-items: center;
+  min-height: 62px;
+  border: 0;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: var(--shadow-border);
+  cursor: pointer;
+  transition-property: transform, background-color, box-shadow, opacity;
+  transition-duration: 150ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+}
+
+.article-practice-choice:active {
+  transform: scale(0.96);
+}
+
+.article-practice-choice:disabled {
+  cursor: default;
+  opacity: 0.78;
+}
+
+.article-practice-choice.is-selected,
+.article-practice-choice.is-correct {
+  opacity: 1;
+  box-shadow: var(--shadow-border-hover);
+}
+
+.article-practice-choice.is-wrong {
+  background: #ffe9e3;
+}
+
+.article-practice-choice.is-correct {
+  background: #e1f6ec;
+}
+
+.article-practice-result {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.article-practice-result strong {
+  font-size: 1.08rem;
+}
+
+.article-practice-result span {
+  max-width: 620px;
+  color: var(--muted);
+  font-weight: 760;
+  line-height: 1.45;
+}
+
 .match-indicator {
   justify-self: start;
   padding: 7px 10px;
@@ -2615,6 +2691,7 @@ body[data-theme="viper"] textarea {
   .dictionary-section,
   .reader-section,
   .trainer-section,
+  .article-trainer-section,
   .settings-section,
   .empty-state {
     opacity: 1;
@@ -3067,6 +3144,43 @@ body[data-theme="viper"] textarea {
   .trainer-stats-strip {
     grid-template-columns: 1fr 1fr;
     gap: 8px;
+  }
+
+  .article-trainer-section {
+    gap: 10px;
+  }
+
+  .article-trainer-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .article-trainer-toolbar h3 {
+    overflow: hidden;
+    font-size: 1.05rem;
+    line-height: 1.12;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .article-practice-card {
+    min-height: calc(100dvh - 218px);
+    padding: 18px;
+    border-radius: 16px;
+  }
+
+  .article-practice-copy h3 {
+    font-size: clamp(2.4rem, 14vw, 4rem);
+  }
+
+  .article-practice-options {
+    gap: 8px;
+  }
+
+  .article-practice-choice {
+    min-height: 58px;
+    border-radius: 13px;
   }
 
   .trainer-card,

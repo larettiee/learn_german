@@ -23,7 +23,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { isSupabaseConfigured, supabase } from "./supabase";
 
-type Tab = "review" | "reader" | "add" | "dictionary" | "trainer" | "settings";
+type Tab = "review" | "reader" | "add" | "dictionary" | "articles" | "trainer" | "settings";
 type Theme = "sekta" | "viper";
 type StudyLanguage = "german" | "english";
 type Article = "" | "der" | "die" | "das";
@@ -118,6 +118,7 @@ const TRAINER_MASTERY_STREAK = 3;
 const READER_PAGE_CHARS = 560;
 const READER_MIN_PAGE_CHARS = 340;
 const DICTIONARY_PAGE_SIZE = 80;
+const ARTICLE_OPTIONS: Article[] = ["der", "die", "das"];
 
 const LANGUAGE_COPY: Record<
   StudyLanguage,
@@ -710,12 +711,19 @@ export function App() {
   const themeCopy = LANGUAGE_COPY[normalizedProfile.language];
   const cloudState = useMemo<CloudState>(() => ({ cards, trainerItems, streak, readerBooks, profile: normalizedProfile }), [cards, trainerItems, streak, readerBooks, normalizedProfile]);
   const activeCards = useMemo(() => cards.filter((card) => (card.language ?? activeLanguage) === activeLanguage), [cards, activeLanguage]);
+  const activeArticleCards = useMemo(() => activeCards.filter((card) => Boolean(leadingArticle(germanText(card)))), [activeCards]);
   const activeTrainerPool = useMemo(() => trainerItems.filter((item) => (item.language ?? activeLanguage) === activeLanguage), [trainerItems, activeLanguage]);
   const activeReaderBooks = useMemo(() => readerBooks.filter((book) => (book.language ?? activeLanguage) === activeLanguage), [readerBooks, activeLanguage]);
 
   useEffect(() => {
     document.body.dataset.theme = isSupabaseConfigured && !session ? "auth" : theme;
   }, [session, theme]);
+
+  useEffect(() => {
+    if (activeLanguage !== "german" && tab === "articles") {
+      setTab("review");
+    }
+  }, [activeLanguage, tab]);
 
   useEffect(() => {
     if (didNormalizeSchedules.current) return;
@@ -1059,6 +1067,9 @@ export function App() {
           <TabButton icon={<FileText />} label="Чтение" active={tab === "reader"} onClick={() => setTab("reader")} />
           <TabButton icon={<Plus />} label="Добавить" active={tab === "add"} onClick={() => setTab("add")} />
           <TabButton icon={<BookOpen />} label="Словарь" active={tab === "dictionary"} onClick={() => setTab("dictionary")} />
+          {activeLanguage === "german" && (
+            <TabButton icon={<Layers />} label="Артикли" active={tab === "articles"} onClick={() => setTab("articles")} badge={activeArticleCards.length} />
+          )}
           <TabButton icon={<Dumbbell />} label="Тренажер" active={tab === "trainer"} onClick={() => setTab("trainer")} badge={activeTrainerItems.length} />
           <TabButton icon={<Settings />} label="Настройки" active={tab === "settings"} onClick={() => setTab("settings")} />
         </nav>
@@ -1104,6 +1115,7 @@ export function App() {
         )}
         {tab === "add" && <AddCardView themeCopy={themeCopy} onAdd={addCard} />}
         {tab === "dictionary" && <DictionaryView themeCopy={themeCopy} cards={activeCards} onUpdate={updateCard} onDelete={deleteCard} />}
+        {tab === "articles" && <ArticleTrainerView cards={activeArticleCards} />}
         {tab === "trainer" && (
           <TrainerView
             themeCopy={themeCopy}
@@ -1408,14 +1420,9 @@ function ReviewView({
   const [swipeOffset, setSwipeOffset] = useState(0);
   const [swipeFeedback, setSwipeFeedback] = useState<"known" | "again" | null>(null);
   const didDrag = useRef(false);
-  const [articleAnswer, setArticleAnswer] = useState<Article>("");
   const card = cards[0];
   const swipeThreshold = 92;
   const nextKnownInterval = card ? REVIEW_INTERVALS[Math.min(completedReviewStep(card), REVIEW_INTERVALS.length - 1)] : REVIEW_INTERVALS[0];
-  const expectedArticle = card ? leadingArticle(germanText(card)) : "";
-  const targetWithoutArticle = card ? germanText(card).replace(/^(der|die|das)\b/i, "").trimStart() : "";
-  const needsArticleCheck = Boolean(card && expectedArticle && completedReviewStep(card) > LEARNING_PHASE_STEPS);
-  const articlePassed = !needsArticleCheck || articleAnswer === expectedArticle;
 
   useEffect(() => {
     setRevealed(false);
@@ -1423,7 +1430,6 @@ function ReviewView({
     setSwipeOffset(0);
     setSwipeFeedback(null);
     didDrag.current = false;
-    setArticleAnswer("");
   }, [card?.id]);
 
   if (!card) {
@@ -1441,16 +1447,11 @@ function ReviewView({
   }
 
   const submitGrade = (grade: ReviewGrade) => {
-    if (grade !== "again" && !articlePassed) {
-      setRevealed(true);
-      return;
-    }
     onReview(card.id, grade);
     setRevealed(false);
     setSwipeStart(null);
     setSwipeOffset(0);
     setSwipeFeedback(null);
-    setArticleAnswer("");
   };
 
   const submitSwipe = (grade: ReviewGrade, feedback: "known" | "again") => {
@@ -1481,13 +1482,6 @@ function ReviewView({
 
   const endSwipe = () => {
     if (swipeOffset > swipeThreshold) {
-      if (!articlePassed) {
-        setRevealed(true);
-        setSwipeStart(null);
-        setSwipeOffset(0);
-        setSwipeFeedback(null);
-        return;
-      }
       submitSwipe("good", "known");
       return;
     }
@@ -1536,7 +1530,7 @@ function ReviewView({
                   <span>Не знаю · через {formatInterval(REVIEW_INTERVALS[0])}</span>
                 </>
               ) : (
-                <span>{needsArticleCheck ? "Нажми и проверь артикль" : "Нажми, чтобы перевернуть"}</span>
+                <span>Нажми, чтобы перевернуть</span>
               )}
             </div>
             <div className="card-meta">
@@ -1549,7 +1543,7 @@ function ReviewView({
 
           <div className="card-face card-back">
             <div className="card-meta">
-              <span>{needsArticleCheck ? "строгая проверка" : "ответ"}</span>
+              <span>ответ</span>
               <span className="tabular">{accuracy(card.correct, card.attempts)}%</span>
             </div>
             <div className="answer-panel">
@@ -1585,27 +1579,6 @@ function ReviewView({
               </div>
             </div>
 
-            {needsArticleCheck && (
-              <div className="article-check" onClick={(event) => event.stopPropagation()}>
-                <p className="prompt-label">Артикль для {targetWithoutArticle}</p>
-                <div className="article-options">
-                  {(["der", "die", "das"] as Article[]).map((article) => (
-                    <button
-                      className={`article-choice ${articleAnswer === article ? "is-selected" : ""} ${articleAnswer && expectedArticle === article ? "is-correct" : ""}`}
-                      key={article}
-                      onClick={() => setArticleAnswer(article)}
-                    >
-                      {article}
-                    </button>
-                  ))}
-                </div>
-                {articleAnswer && (
-                  <p className={`article-result ${articlePassed ? "ok" : "diff"}`}>
-                    {articlePassed ? "Верно, можно свайпать вправо" : `Нужен артикль ${expectedArticle}`}
-                  </p>
-                )}
-              </div>
-            )}
           </div>
         </div>
       </div>
@@ -1615,7 +1588,7 @@ function ReviewView({
           <X size={18} />
           <span>Не знаю</span>
         </button>
-        <button className="grade-button good" onClick={() => submitGrade("good")} disabled={!articlePassed}>
+        <button className="grade-button good" onClick={() => submitGrade("good")}>
           <Check size={18} />
           <span>Знаю</span>
         </button>
@@ -1624,6 +1597,80 @@ function ReviewView({
         <ArrowRight className="is-back" size={18} />
         <span>Назад</span>
       </button>
+    </section>
+  );
+}
+
+function ArticleTrainerView({ cards }: { cards: Card[] }) {
+  const [index, setIndex] = useState(0);
+  const [selectedArticle, setSelectedArticle] = useState<Article>("");
+  const card = cards.length ? cards[index % cards.length] : undefined;
+  const expectedArticle = card ? leadingArticle(germanText(card)) : "";
+  const wordWithoutArticle = card ? germanText(card).replace(/^(der|die|das)\b/i, "").trimStart() : "";
+  const hasAnswered = Boolean(selectedArticle);
+  const isCorrect = hasAnswered && selectedArticle === expectedArticle;
+
+  useEffect(() => {
+    setIndex(0);
+    setSelectedArticle("");
+  }, [cards.length]);
+
+  const goNext = () => {
+    setSelectedArticle("");
+    setIndex((current) => (cards.length ? (current + 1) % cards.length : 0));
+  };
+
+  if (!card) {
+    return (
+      <section className="empty-state">
+        <Layers size={28} />
+        <h3>Нет слов с артиклями</h3>
+        <p>Добавь в словарь немецкие существительные с `der`, `die` или `das`, и здесь появится отдельная тренировка.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="article-trainer-section">
+      <div className="section-toolbar article-trainer-toolbar">
+        <div>
+          <p className="eyebrow">Artikeltraining</p>
+          <h3>Проверка артиклей</h3>
+        </div>
+        <span className="reader-progress-pill tabular">{index + 1} / {cards.length}</span>
+      </div>
+
+      <div className={`article-practice-card ${hasAnswered ? (isCorrect ? "is-correct" : "is-wrong") : ""}`}>
+        <div className="article-practice-copy">
+          <p className="prompt-label">Выбери артикль</p>
+          <h3>{wordWithoutArticle}</h3>
+          <p>{hasAnswered ? `Правильно: ${expectedArticle} ${wordWithoutArticle}` : "Слово взято из твоего словаря."}</p>
+        </div>
+
+        <div className="article-practice-options" aria-label="Варианты артикля">
+          {ARTICLE_OPTIONS.map((article) => (
+            <button
+              className={`article-practice-choice ${selectedArticle === article ? "is-selected" : ""} ${hasAnswered && expectedArticle === article ? "is-correct" : ""} ${hasAnswered && selectedArticle === article && selectedArticle !== expectedArticle ? "is-wrong" : ""}`}
+              disabled={hasAnswered}
+              key={article}
+              onClick={() => setSelectedArticle(article)}
+            >
+              <span className={`article-token ${article}`}>{article}</span>
+            </button>
+          ))}
+        </div>
+
+        {hasAnswered && (
+          <div className="article-practice-result">
+            <strong>{isCorrect ? "Верно" : "Не этот артикль"}</strong>
+            <span>{card.example || card.russian}</span>
+            <button className="primary-button" onClick={goNext}>
+              <span>Дальше</span>
+              <ArrowRight size={18} />
+            </button>
+          </div>
+        )}
+      </div>
     </section>
   );
 }
